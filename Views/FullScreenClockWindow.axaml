@@ -1,0 +1,73 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="EveningSelfStudyClock.Views.FullScreenClockWindow"
+        Title="{Binding WindowTitle}"
+        WindowState="FullScreen"
+        SystemDecorations="None"
+        ShowInTaskbar="False"
+        CanResize="False"
+        Background="#000000"
+        FontFamily="Microsoft YaHei,SimHei,sans-serif">
+
+    <Grid RowDefinitions="Auto,*,Auto"
+          Margin="40,30,40,25">
+
+        <!-- 日期 -->
+        <TextBlock Grid.Row="0" Text="{Binding CurrentDate}"
+                   FontSize="22" Foreground="#66ffffff"
+                   HorizontalAlignment="Right"/>
+
+        <!-- 主体 -->
+        <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="20">
+            <!-- 时间 -->
+            <TextBlock Text="{Binding CurrentTime}"
+                       FontSize="200" FontWeight="Bold"
+                       Foreground="#ffffff"
+                       FontFamily="Consolas,monospace"
+                       HorizontalAlignment="Center"/>
+
+            <!-- 课程时间信息 -->
+            <TextBlock Text="{Binding CourseInfoText}"
+                       FontSize="28" FontWeight="Bold"
+                       Foreground="#88ccff"
+                       HorizontalAlignment="Center"/>
+
+            <!-- 分贝 -->
+            <Border Background="#1a1a2e" CornerRadius="16" Padding="32,20" Width="640" HorizontalAlignment="Center">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="📢 教室音量" FontSize="18" Foreground="#aaffffff" HorizontalAlignment="Center"/>
+                    <ProgressBar Value="{Binding NoiseLevelProgress}"
+                                 Minimum="0" Maximum="100" Height="10"
+                                 Background="#33ffffff"
+                                 Foreground="{Binding AccentColor}"
+                                 CornerRadius="5"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="12">
+                        <TextBlock Text="{Binding NoiseLevelEmoji}" FontSize="36"/>
+                        <TextBlock Text="{Binding NoiseLevelText}" FontSize="32" FontWeight="Bold"
+                                   Foreground="#ffffff" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- 底部 -->
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,6,0,0">
+            <TextBlock Grid.Column="0" Text="{Binding NoisyDisplayText}"
+                       FontSize="24" Foreground="#ffff44"
+                       VerticalAlignment="Center" FontWeight="Bold"/>
+            <Button Grid.Column="1" Content="✕ 退出全屏时钟"
+                    FontSize="15" Foreground="#ffffff44"
+                    Background="#22ffffff" BorderThickness="0"
+                    CornerRadius="6" Padding="12,6"
+                    Cursor="Hand" Opacity="0.5"
+                    Click="ExitButton_Click">
+                <Button.Styles>
+                    <Style Selector="Button:pointerover">
+                        <Setter Property="Opacity" Value="1"/>
+                        <Setter Property="Background" Value="#44ffffff"/>
+                    </Style>
+                </Button.Styles>
+            </Button>
+        </Grid>
+    </Grid>
+</Window>
