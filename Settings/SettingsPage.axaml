@@ -1,86 +1,141 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="EveningSelfStudyClock.Settings.SettingsPage">
-    <ScrollViewer>
-        <StackPanel Spacing="16" Margin="16">
+    <Grid ColumnDefinitions="*,280" Margin="12">
 
-            <!-- 测试 + 保存按钮 -->
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <Button Grid.Column="0" Content="▶ 进入全屏时钟"
-                        FontSize="16" FontWeight="Bold"
+        <!-- ===== 左栏：设置（可滚动） ===== -->
+        <ScrollViewer Grid.Column="0" Padding="0,0,12,0">
+            <StackPanel Spacing="14" Margin="4,8,0,8">
+
+                <!-- 功能开关 -->
+                <Border Background="#1e1e2e" CornerRadius="8" Padding="14,12">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="⚙ 显示开关" FontSize="17" FontWeight="Bold" Foreground="#ffffff"/>
+                        <CheckBox IsChecked="{Binding ShowDecibelMeter}" FontSize="14" Foreground="#ffffff">🎤 教室分贝</CheckBox>
+                        <CheckBox IsChecked="{Binding ShowCourseInfo}" FontSize="14" Foreground="#ffffff">📋 课程信息</CheckBox>
+                        <CheckBox IsChecked="{Binding ShowNoisyCounter}" FontSize="14" Foreground="#ffffff">📊 吵闹计数</CheckBox>
+                    </StackPanel>
+                </Border>
+
+                <!-- 目标课程 -->
+                <Border Background="#1e1e2e" CornerRadius="8" Padding="14,12">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="📋 触发课程" FontSize="17" FontWeight="Bold" Foreground="#ffffff"/>
+                        <TextBlock Text="选择要触发的课程，可添加多个。" FontSize="12" Foreground="#88ffffff" TextWrapping="Wrap"/>
+                        <ItemsControl ItemsSource="{Binding SelectedCourses}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,2" ColumnSpacing="6">
+                                        <ComboBox ItemsSource="{Binding AllCourses}"
+                                                  SelectedItem="{Binding SelectedName}"
+                                                  FontSize="13" Padding="6,3"/>
+                                        <Button Grid.Column="1" Content="✕" FontSize="13"
+                                                Foreground="#ff6666" Background="Transparent"
+                                                BorderThickness="0" Cursor="Hand" Padding="6,3"
+                                                Command="{Binding RemoveCommand}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="＋ 添加课程" FontSize="13"
+                                Foreground="#88ccff" Background="#22ffffff"
+                                CornerRadius="6" Padding="8,5"
+                                Cursor="Hand" Click="AddCourse_Click"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 分贝阈值 -->
+                <Border Background="#1e1e2e" CornerRadius="8" Padding="14,12">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="🔊 噪音等级阈值 (RMS)" FontSize="17" FontWeight="Bold" Foreground="#ffffff"/>
+                        <Grid ColumnDefinitions="Auto,*,Auto" RowSpacing="6" ColumnSpacing="8"
+                              RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="安静" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding DecibelQuietThresholdText}" FontSize="12" Padding="4"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="良好" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding DecibelGoodThresholdText}" FontSize="12" Padding="4"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="一般" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
+                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding DecibelNormalThresholdText}" FontSize="12" Padding="4"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="吵闹" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
+                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding DecibelNoisyThresholdText}" FontSize="12" Padding="4"/>
+                            <TextBlock Grid.Row="4" Grid.ColumnSpan="2" Text="超过吵闹 = 「嘈杂」" FontSize="11" Foreground="#66ffffff"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- 外观 -->
+                <Border Background="#1e1e2e" CornerRadius="8" Padding="14,12">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="🎨 外观" FontSize="17" FontWeight="Bold" Foreground="#ffffff"/>
+                        <Grid ColumnDefinitions="Auto,*,Auto" RowSpacing="6" ColumnSpacing="8"
+                              RowDefinitions="Auto,Auto,Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="时钟字号" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
+                            <Slider Grid.Row="0" Grid.Column="1" Value="{Binding ClockFontSize}" Minimum="60" Maximum="400"
+                                    TickFrequency="20"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding ClockFontSizeText}" FontSize="12"
+                                       Foreground="#ffffff" Width="40" TextAlignment="Center" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="背景颜色" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding BackgroundColor}" FontSize="12" Padding="4"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="字体颜色" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
+                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding FontColor}" FontSize="12" Padding="4"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="强调色" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
+                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding AccentColor}" FontSize="12" Padding="4"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- 规则说明 -->
+                <Border Background="#1e1e2e" CornerRadius="8" Padding="14,12">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="📝 记录规则" FontSize="17" FontWeight="Bold" Foreground="#ffffff"/>
+                        <TextBlock Text="• 一般：音量达到「💬 一般」等级时计数" FontSize="12" Foreground="#aaffffff" TextWrapping="Wrap"/>
+                        <TextBlock Text="• 吵闹：音量达到「🗣️ 吵闹」或「📢 嘈杂」等级时计数（不再重复计入一般）" FontSize="12" Foreground="#aaffffff" TextWrapping="Wrap"/>
+                        <TextBlock Text="• 每次计数后需等待设置的冷却时间（默认 60 秒）" FontSize="12" Foreground="#aaffffff" TextWrapping="Wrap"/>
+                        <TextBlock Text="• 开启「课前 3 分钟不记录」后，上课前 3 分钟内不计数" FontSize="12" Foreground="#aaffffff" TextWrapping="Wrap"/>
+                        <TextBlock Text="⚠ 免责声明：分贝记录仅供参考，可能受教室风扇、空调、开关门、桌椅移动、脚步声等环境杂音影响，不代表真实纪律状况。" FontSize="12" Foreground="#ffaa44" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 进入时钟 -->
+                <Button Content="▶ 进入全屏时钟"
+                        FontSize="15" FontWeight="Bold"
                         Foreground="#ffffff" Background="#4CAF50"
-                        CornerRadius="8" Padding="12,10"
-                        Cursor="Hand" Click="TestButton_Click"/>
-                <Button Grid.Column="1" Content="💾 保存设置"
-                        FontSize="16" FontWeight="Bold"
-                        Foreground="#ffffff" Background="#5555cc"
-                        CornerRadius="8" Padding="12,10"
-                        Cursor="Hand" Click="SaveButton_Click"/>
-            </Grid>
+                        CornerRadius="8" Padding="10,8"
+                        Cursor="Hand" Click="TestButton_Click"
+                        HorizontalAlignment="Stretch"/>
+            </StackPanel>
+        </ScrollViewer>
 
-            <!-- 目标课程 -->
-            <Border Background="#1e1e2e" CornerRadius="8" Padding="16">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="📋 触发课程" FontSize="18" FontWeight="Bold" Foreground="#ffffff"/>
-                    <TextBlock Text="选择要在全屏时钟中显示的课程，可添加多个。" FontSize="13" Foreground="#88ffffff" TextWrapping="Wrap"/>
-
-                    <ItemsControl ItemsSource="{Binding SelectedCourses}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid ColumnDefinitions="*,Auto" Margin="0,2" ColumnSpacing="8">
-                                    <ComboBox ItemsSource="{Binding AllCourses}"
-                                              SelectedItem="{Binding SelectedName}"
-                                              FontSize="14" Padding="8,4"/>
-                                    <Button Grid.Column="1" Content="✕" FontSize="14"
-                                            Foreground="#ff6666" Background="Transparent"
-                                            BorderThickness="0" Cursor="Hand" Padding="8,4"
-                                            Command="{Binding RemoveCommand}"/>
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <Button Content="＋ 添加课程" FontSize="14"
-                            Foreground="#88ccff" Background="#22ffffff"
-                            CornerRadius="6" Padding="10,6"
-                            Cursor="Hand" Click="AddCourse_Click"/>
-                </StackPanel>
-            </Border>
-
-            <!-- 分贝阈值 -->
-            <Border Background="#1e1e2e" CornerRadius="8" Padding="16">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="🔊 噪音等级阈值 (RMS)" FontSize="18" FontWeight="Bold" Foreground="#ffffff"/>
-                    <Grid ColumnDefinitions="Auto,120" RowSpacing="8" ColumnSpacing="12"
-                          RowDefinitions="Auto,Auto,Auto,Auto,Auto">
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="安静阈值" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="14"/>
-                        <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding DecibelQuietThresholdText}" FontSize="13" Padding="4"/>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="良好阈值" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="14"/>
-                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding DecibelGoodThresholdText}" FontSize="13" Padding="4"/>
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="一般阈值" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="14"/>
-                        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding DecibelNormalThresholdText}" FontSize="13" Padding="4"/>
-                        <TextBlock Grid.Row="3" Grid.Column="0" Text="吵闹阈值" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="14"/>
-                        <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding DecibelNoisyThresholdText}" FontSize="13" Padding="4"/>
-                        <TextBlock Grid.Row="4" Grid.ColumnSpan="2" Text="超过吵闹 = 「嘈杂」" FontSize="12" Foreground="#66ffffff"/>
-                    </Grid>
-                </StackPanel>
-            </Border>
-
-            <!-- 外观 -->
-            <Border Background="#1e1e2e" CornerRadius="8" Padding="16">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="🎨 外观" FontSize="18" FontWeight="Bold" Foreground="#ffffff"/>
-                    <Grid ColumnDefinitions="Auto,120" RowSpacing="10" ColumnSpacing="12"
-                          RowDefinitions="Auto,Auto,Auto">
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="背景颜色" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="14"/>
-                        <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding BackgroundColor}" FontSize="13" Padding="4"/>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="字体颜色" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="14"/>
-                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding FontColor}" FontSize="13" Padding="4"/>
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="强调色" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="14"/>
-                        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding AccentColor}" FontSize="13" Padding="4"/>
-                    </Grid>
-                </StackPanel>
-            </Border>
-        </StackPanel>
-    </ScrollViewer>
+        <!-- ===== 右栏：实时预览（置顶不滚动） ===== -->
+        <Border Grid.Column="1" Background="#000000" CornerRadius="12" Padding="12,10"
+                VerticalAlignment="Top" Margin="4,8,0,0">
+            <StackPanel Spacing="4" HorizontalAlignment="Center" Width="240">
+                <TextBlock Text="预览" FontSize="11" Foreground="#55ffffff"
+                           HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                <TextBlock Text="{Binding PreviewTime}"
+                           FontSize="{Binding PreviewFontSize}"
+                           FontWeight="Bold" Foreground="#ffffff"
+                           FontFamily="Consolas,monospace"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text="{Binding PreviewCourseText}" IsVisible="{Binding ShowCourseInfo}"
+                           FontSize="11" FontWeight="Bold" Foreground="#88ccff"
+                           HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                <Border Background="#1a1a2e" CornerRadius="6" Padding="6,4"
+                        IsVisible="{Binding ShowDecibelMeter}"
+                        HorizontalAlignment="Center">
+                    <StackPanel Spacing="2" HorizontalAlignment="Center">
+                        <TextBlock Text="📢 教室音量" FontSize="9" Foreground="#aaffffff" HorizontalAlignment="Center"/>
+                        <Border Background="#33ffffff" CornerRadius="2" Height="3" Width="160"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="2">
+                            <TextBlock Text="🤫" FontSize="11"/>
+                            <TextBlock Text="安静" FontSize="10" Foreground="#ffffff"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <TextBlock Text="晚自习  吵闹 2 次" IsVisible="{Binding ShowNoisyCounter}"
+                           FontSize="10" Foreground="#ffff44" HorizontalAlignment="Center"
+                           FontWeight="Bold"/>
+            </StackPanel>
+        </Border>
+    </Grid>
 </UserControl>

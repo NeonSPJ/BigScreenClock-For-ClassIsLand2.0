@@ -13,6 +13,8 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
 {
     private readonly PluginSettings _settings;
     private WaveInEvent? _waveIn;
+    private DateTime _lastDataReceived;
+    private System.Timers.Timer? _watchdogTimer;
     private double _currentRms;
     private int _displayLevel; // 0-100 正数显示
     private string _noiseLevelText = "等待检测...";
@@ -91,7 +93,12 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
     public void StartMonitoring()
     {
         if (_isMonitoring) return;
+        StartMonitoringInternal();
+        StartWatchdog();
+    }
 
+    private void StartMonitoringInternal()
+    {
         try
         {
             int count = WaveInEvent.DeviceCount;
@@ -102,7 +109,6 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
                 return;
             }
 
-            // 先用上次的设备，失败则遍历所有设备
             int[] tryOrder = Enumerable.Range(0, count).ToArray();
             int preferred = _settings.MicrophoneDeviceIndex;
             if (preferred >= 0 && preferred < count)
@@ -118,6 +124,7 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
                     wi.StartRecording();
                     _waveIn = wi;
                     _isMonitoring = true;
+                    _lastDataReceived = DateTime.Now;
                     _settings.MicrophoneDeviceIndex = idx;
                     StatusMessage = "";
                     return;
@@ -136,7 +143,43 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>
+    /// 看门狗：如果超过 5 秒没收到音频数据（说明设备休眠后失效），自动重启
+    /// </summary>
+    private void StartWatchdog()
+    {
+        _watchdogTimer?.Dispose();
+        _watchdogTimer = new System.Timers.Timer(5000);
+        _watchdogTimer.Elapsed += (_, _) =>
+        {
+            if (!_isMonitoring) return;
+            if ((DateTime.Now - _lastDataReceived).TotalSeconds > 5)
+            {
+                System.Diagnostics.Debug.WriteLine("[DecibelMeter] 看门狗检测到数据中断，重启音频");
+                Dispatcher.UIThread.Post(() =>
+                {
+                    StopMonitoringInternal();
+                    StartMonitoringInternal();
+                });
+            }
+        };
+        _watchdogTimer.Start();
+    }
+
+    private void StopWatchdog()
+    {
+        _watchdogTimer?.Stop();
+        _watchdogTimer?.Dispose();
+        _watchdogTimer = null;
+    }
+
     public void StopMonitoring()
+    {
+        StopWatchdog();
+        StopMonitoringInternal();
+    }
+
+    private void StopMonitoringInternal()
     {
         if (!_isMonitoring || _waveIn == null) return;
 
@@ -170,6 +213,7 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e)
     {
+        _lastDataReceived = DateTime.Now;
         if (e.BytesRecorded == 0) return;
 
         try

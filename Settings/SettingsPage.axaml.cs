@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Text.Json;
+using System.Timers;
 using System.Windows.Input;
+using Avalonia.Threading;
 using ClassIsland.Core.Abstractions.Controls;
 using ClassIsland.Core.Attributes;
 using ClassIsland.Core.Enums.SettingsWindow;
@@ -11,11 +13,15 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace EveningSelfStudyClock.Settings;
 
-[SettingsPageInfo("com.eveningstudy.clock.settings", "大屏时钟", SettingsPageCategory.External)]
+[SettingsPageInfo("com.bigscreen.clock.settings", "大屏时钟", SettingsPageCategory.External)]
 public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
 {
     private readonly PluginSettings _settings;
     private List<string> _allCourseNames = new();
+    private System.Timers.Timer? _previewTimer;
+
+    private string _previewTime = DateTime.Now.ToString("HH:mm:ss");
+    private string _previewCourseText = "当前课程为 晚自习   18:30 — 21:30";
 
     public ObservableCollection<CourseSelectionItem> SelectedCourses { get; } = new();
 
@@ -26,6 +32,38 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
         DataContext = this;
         LoadAllCourseNames();
         RestoreSelectedCourses();
+        StartPreviewTimer();
+    }
+
+    private void StartPreviewTimer()
+    {
+        _previewTimer = new System.Timers.Timer(1000);
+        _previewTimer.Elapsed += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            PreviewTime = DateTime.Now.ToString("HH:mm:ss");
+        });
+        _previewTimer.Start();
+    }
+
+    public string PreviewTime
+    {
+        get => _previewTime;
+        set { _previewTime = value; OnPropertyChanged(nameof(PreviewTime)); }
+    }
+
+    public string PreviewCourseText
+    {
+        get => _previewCourseText;
+        set { _previewCourseText = value; OnPropertyChanged(nameof(PreviewCourseText)); }
+    }
+
+    public int PreviewFontSize => Math.Max(12, _settings.ClockFontSize / 5);
+
+    // 滑块绑定需要 double
+    public double ClockFontSize
+    {
+        get => _settings.ClockFontSize;
+        set { _settings.ClockFontSize = (int)value; OnPropertyChanged(nameof(ClockFontSize)); OnPropertyChanged(nameof(PreviewFontSize)); }
     }
 
     private void LoadAllCourseNames()
@@ -65,13 +103,6 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
     {
         SelectedCourses.Add(new CourseSelectionItem(_allCourseNames, null, this));
         SaveCourses();
-    }
-
-    public void SaveButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        SaveCourses();
-        // UI feedback - save button already clicked
-        OnPropertyChanged(nameof(SelectedCourses));
     }
 
     internal void OnCourseSelectionChanged() => SaveCourses();
@@ -121,8 +152,28 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
         set { if (double.TryParse(value, out var v)) _settings.DecibelNoisyThreshold = v; }
     }
 
+    public bool ShowDecibelMeter
+    {
+        get => _settings.ShowDecibelMeter;
+        set { _settings.ShowDecibelMeter = value; OnPropertyChanged(nameof(ShowDecibelMeter)); }
+    }
+
+    public bool ShowCourseInfo
+    {
+        get => _settings.ShowCourseInfo;
+        set { _settings.ShowCourseInfo = value; OnPropertyChanged(nameof(ShowCourseInfo)); }
+    }
+
+    public bool ShowNoisyCounter
+    {
+        get => _settings.ShowNoisyCounter;
+        set { _settings.ShowNoisyCounter = value; OnPropertyChanged(nameof(ShowNoisyCounter)); }
+    }
+
     public string BackgroundColor { get => _settings.BackgroundColor; set => _settings.BackgroundColor = value; }
     public string FontColor { get => _settings.FontColor; set => _settings.FontColor = value; }
+    public string ClockFontSizeText => $"{_settings.ClockFontSize}px";
+
     public string AccentColor { get => _settings.AccentColor; set => _settings.AccentColor = value; }
 
     public new event PropertyChangedEventHandler? PropertyChanged;

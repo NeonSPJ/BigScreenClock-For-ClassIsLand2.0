@@ -16,6 +16,12 @@ public class PluginSettings : INotifyPropertyChanged
     private string _fontColor = "#ffffff";
     private string _accentColor = "#4CAF50";
     private int _microphoneDeviceIndex;
+    private bool _showDecibelMeter = true;
+    private bool _showCourseInfo = true;
+    private bool _showNoisyCounter = true;
+    private int _noisyCooldownSeconds = 60;
+    private bool _skipFirst3Min = true;
+    private int _clockFontSize = 180;
     private string _windowTitle = "大屏时钟";
 
     public PluginSettings()
@@ -102,6 +108,60 @@ public class PluginSettings : INotifyPropertyChanged
     {
         get => _microphoneDeviceIndex;
         set { _microphoneDeviceIndex = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 是否显示教室分贝
+    /// </summary>
+    public bool ShowDecibelMeter
+    {
+        get => _showDecibelMeter;
+        set { _showDecibelMeter = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 是否显示课程信息
+    /// </summary>
+    public bool ShowCourseInfo
+    {
+        get => _showCourseInfo;
+        set { _showCourseInfo = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 是否显示吵闹计数
+    /// </summary>
+    public bool ShowNoisyCounter
+    {
+        get => _showNoisyCounter;
+        set { _showNoisyCounter = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 吵闹计数冷却时间 (秒)
+    /// </summary>
+    public int NoisyCooldownSeconds
+    {
+        get => _noisyCooldownSeconds;
+        set { _noisyCooldownSeconds = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 上课前 3 分钟是否不计数
+    /// </summary>
+    public bool SkipFirst3Min
+    {
+        get => _skipFirst3Min;
+        set { _skipFirst3Min = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 时钟字号 (px)
+    /// </summary>
+    public int ClockFontSize
+    {
+        get => _clockFontSize;
+        set { _clockFontSize = value; OnPropertyChanged(); }
     }
 
     /// <summary>

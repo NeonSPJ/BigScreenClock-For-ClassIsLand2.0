@@ -25,14 +25,17 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
     private string _currentTime = "00:00:00";
     private string _currentDate = "";
     private string _currentCourseName = "";
-    private int _currentClassNoisyCount;
+    private int _normalCount;       // 一般 次数
+    private int _noisyCount;        // 吵闹+嘈杂 次数
     private string _currentClassName = "";
     private string _noisyDisplayText = "";
     private readonly List<string> _classSummaries = new();
     private bool _isWindowVisible;
     private bool _isInBreak;
+    private DateTime _classStartTime;
     private string _courseInfoText = "";
     private List<TimeSlot> _todaySlots = new();
+    private System.Timers.Timer? _antiScreensaverTimer;
 
     public FullScreenClockViewModel(
         PluginSettings settings,
@@ -44,6 +47,16 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         _serviceProvider = serviceProvider;
 
         _decibelService.PropertyChanged += OnDecibelPropertyChanged;
+        _settings.PropertyChanged += OnSettingsPropertyChanged;
+    }
+
+    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(PluginSettings.NoisyCooldownSeconds)
+            or nameof(PluginSettings.SkipFirst3Min))
+        {
+            OnPropertyChanged(nameof(RulesText));
+        }
     }
 
     private void OnDecibelPropertyChanged(object? sender, PropertyChangedEventArgs args)
@@ -65,13 +78,29 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
 
     private void TryCountNoisy(string level)
     {
-        if (!level.Contains("吵闹") && !level.Contains("嘈杂")) return;
+        if (!_settings.ShowNoisyCounter) return;
         if (_isInBreak) return;
-        if ((DateTime.Now - _lastNoisyTime).TotalSeconds < 3) return;
 
-        _currentClassNoisyCount++;
-        _lastNoisyTime = DateTime.Now;
-        UpdateNoisyDisplay();
+        // 上课前 N 分钟不计数
+        if (_settings.SkipFirst3Min && (DateTime.Now - _classStartTime).TotalSeconds < 180) return;
+
+        // 冷却
+        var elapsed = (DateTime.Now - _lastNoisyTime).TotalSeconds;
+        if (elapsed < _settings.NoisyCooldownSeconds) return;
+
+        // 分类计数
+        if (level.Contains("吵闹") || level.Contains("嘈杂"))
+        {
+            _noisyCount++;
+            _lastNoisyTime = DateTime.Now;
+            UpdateNoisyDisplay();
+        }
+        else if (level == "一般")
+        {
+            _normalCount++;
+            _lastNoisyTime = DateTime.Now;
+            UpdateNoisyDisplay();
+        }
     }
 
     public string CurrentTime
@@ -111,6 +140,22 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         set { _noisyDisplayText = value; OnPropertyChanged(); }
     }
 
+    private bool _showDecibelMeter = true;
+    private bool _showCourseInfo = true;
+    private int _clockFontSize = 180;
+
+    public bool ShowDecibelMeter
+    {
+        get => _showDecibelMeter;
+        set { _showDecibelMeter = value; OnPropertyChanged(); }
+    }
+
+    public bool ShowCourseInfo
+    {
+        get => _showCourseInfo;
+        set { _showCourseInfo = value; OnPropertyChanged(); }
+    }
+
     public string CourseInfoText
     {
         get => _courseInfoText;
@@ -119,12 +164,39 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
 
     private DateTime _lastNoisyTime;
 
+    public int ClockFontSize
+    {
+        get => _clockFontSize;
+        set { _clockFontSize = value; OnPropertyChanged(); }
+    }
+
     public string WindowTitle => _settings.WindowTitle;
+
+    /// <summary>
+    /// 全屏界面底部的记录规则 + 免责声明（跟随设置动态生成）
+    /// </summary>
+    public string RulesText
+    {
+        get
+        {
+            var parts = new List<string>();
+            parts.Add("吵闹/嘈杂记一次「吵闹」，一般记一次「一般」");
+            parts.Add($"每次计数冷却 {_settings.NoisyCooldownSeconds} 秒");
+            if (_settings.SkipFirst3Min) parts.Add("课前 3 分钟不记录");
+            return string.Join("，", parts)
+                + "　|　⚠ 分贝仅供参考，可能受风扇、空调、开关门、脚步声等环境杂音影响";
+        }
+    }
 
     public void Show()
     {
         Dispatcher.UIThread.Post(() =>
         {
+            // 必须在创建窗口前同步，否则绑定读到的是旧值
+            ShowDecibelMeter = _settings.ShowDecibelMeter;
+            ShowCourseInfo = _settings.ShowCourseInfo;
+            ClockFontSize = _settings.ClockFontSize;
+
             if (_window == null)
             {
                 _window = new FullScreenClockWindow { DataContext = this };
@@ -141,7 +213,8 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
             if (_window.IsVisible) { RefreshAll(); return; }
 
             // 重置新一轮记录
-            _currentClassNoisyCount = 0;
+            _normalCount = 0;
+            _noisyCount = 0;
             _currentClassName = "";
             _classSummaries.Clear();
             _isInBreak = false;
@@ -151,11 +224,12 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
             LoadTodaySchedule();
             SubscribeToClassEvents();
 
-            // 重新订阅分贝事件（确保计数链路有效）
+            // 重新订阅分贝事件
             _decibelService.PropertyChanged -= OnDecibelPropertyChanged;
             _decibelService.PropertyChanged += OnDecibelPropertyChanged;
 
             StartUpdateTimer();
+            StartAntiScreensaver();
             _decibelService.StartMonitoring();
             RefreshAll();
 
@@ -172,6 +246,7 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         {
             _window?.Hide();
             StopUpdateTimer();
+            StopAntiScreensaver();
             _decibelService.StopMonitoring();
             IsWindowVisible = false;
             SetMainWindowVisible(true);
@@ -354,6 +429,16 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         catch { }
     }
 
+    private string BuildSummary()
+    {
+        if (string.IsNullOrEmpty(_currentClassName) || (_normalCount == 0 && _noisyCount == 0))
+            return "";
+        var parts = new List<string>();
+        if (_normalCount > 0) parts.Add($"一般 {_normalCount} 次");
+        if (_noisyCount > 0) parts.Add($"吵闹 {_noisyCount} 次");
+        return $"上节课 {_currentClassName}  {string.Join("  ", parts)}";
+    }
+
     private void OnTimeStateChanged(object? sender, EventArgs e)
     {
         Dispatcher.UIThread.Post(() =>
@@ -366,22 +451,25 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
 
                 if (state == ClassIsland.Shared.Enums.TimeState.OnClass)
                 {
-                    // 进入上课：如果课程变了，保存上一节课的总结
+                    // 课程切换 → 保存上一节总结
                     if (!string.IsNullOrEmpty(_currentClassName) && _currentClassName != subjectName)
                     {
-                        _classSummaries.Add($"上节课 {_currentClassName}  共有 {_currentClassNoisyCount} 次吵闹");
+                        var summary = BuildSummary();
+                        if (!string.IsNullOrEmpty(summary)) _classSummaries.Add(summary);
                     }
                     _currentClassName = subjectName;
-                    _currentClassNoisyCount = 0;
+                    _normalCount = 0;
+                    _noisyCount = 0;
+                    _classStartTime = DateTime.Now;
                     _isInBreak = false;
                     UpdateNoisyDisplay();
                 }
                 else if (state == ClassIsland.Shared.Enums.TimeState.Breaking)
                 {
-                    // 进入课间：保存当前课程总结，停止计数
-                    if (!string.IsNullOrEmpty(_currentClassName) && _currentClassNoisyCount > 0)
+                    if (!string.IsNullOrEmpty(_currentClassName) && (_normalCount > 0 || _noisyCount > 0))
                     {
-                        _classSummaries.Add($"上节课 {_currentClassName}  共有 {_currentClassNoisyCount} 次吵闹");
+                        var summary = BuildSummary();
+                        if (!string.IsNullOrEmpty(summary)) _classSummaries.Add(summary);
                     }
                     _isInBreak = true;
                     UpdateNoisyDisplay();
@@ -393,19 +481,48 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
 
     private void UpdateNoisyDisplay()
     {
+        if (!_settings.ShowNoisyCounter)
+        {
+            NoisyDisplayText = "";
+            return;
+        }
         if (_isInBreak)
         {
-            // 课间显示最近一条总结
-            NoisyDisplayText = _classSummaries.Count > 0
-                ? _classSummaries[^1] : "";
+            NoisyDisplayText = _classSummaries.Count > 0 ? _classSummaries[^1] : "";
         }
         else
         {
-            // 上课中显示当前课程计数
-            NoisyDisplayText = !string.IsNullOrEmpty(_currentClassName)
-                ? $"{_currentClassName}  吵闹 {_currentClassNoisyCount} 次"
-                : "";
+            if (string.IsNullOrEmpty(_currentClassName)) { NoisyDisplayText = ""; return; }
+            var parts = new List<string>();
+            if (_normalCount > 0) parts.Add($"一般 {_normalCount} 次");
+            if (_noisyCount > 0) parts.Add($"吵闹 {_noisyCount} 次");
+            NoisyDisplayText = parts.Count > 0 ? $"{_currentClassName}  {string.Join("  ", parts)}" : "";
         }
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern uint SetThreadExecutionState(uint esFlags);
+    private const uint ES_CONTINUOUS = 0x80000000;
+    private const uint ES_DISPLAY_REQUIRED = 0x00000002;
+    private const uint ES_SYSTEM_REQUIRED = 0x00000001;
+
+    private void StartAntiScreensaver()
+    {
+        _antiScreensaverTimer?.Dispose();
+        _antiScreensaverTimer = new System.Timers.Timer(25 * 60 * 1000); // 每 25 分钟
+        _antiScreensaverTimer.Elapsed += (_, _) =>
+        {
+            SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED);
+        };
+        _antiScreensaverTimer.Start();
+        // 立即执行一次
+        SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED);
+    }
+
+    private void StopAntiScreensaver()
+    {
+        _antiScreensaverTimer?.Dispose();
+        _antiScreensaverTimer = null;
     }
 
     public void ExitFullScreen() => Hide();

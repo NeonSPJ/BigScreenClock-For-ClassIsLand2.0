@@ -11,10 +11,6 @@ C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\README.md
 C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\EveningSelfStudyClock.deps.json
 C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\EveningSelfStudyClock.dll
 C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\EveningSelfStudyClock.pdb
-C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.dll
-C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\refint\EveningSelfStudyClock.dll
-C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.pdb
-C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\ref\EveningSelfStudyClock.dll
 C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\NAudio.dll
 C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\NAudio.Asio.dll
 C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\NAudio.Core.dll
@@ -23,3 +19,7 @@ C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\NAudio.Was
 C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\NAudio.WinForms.dll
 C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\NAudio.WinMM.dll
 C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningS.62743A61.Up2Date
+C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.dll
+C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\refint\EveningSelfStudyClock.dll
+C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.pdb
+C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\ref\EveningSelfStudyClock.dll
