@@ -1,10 +1,3 @@
-C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.csproj.AssemblyReference.cache
-C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\Avalonia\Resources.Inputs.cache
-C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\Avalonia\resources
-C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.GeneratedMSBuildEditorConfig.editorconfig
-C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.AssemblyInfoInputs.cache
-C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.AssemblyInfo.cs
-C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.csproj.CoreCompileInputs.cache
 C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\icon.png
 C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\manifest.yml
 C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\README.md
@@ -18,6 +11,13 @@ C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\NAudio.Mid
 C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\NAudio.Wasapi.dll
 C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\NAudio.WinForms.dll
 C:\Users\ASUS\Projects\EveningSelfStudyClock\bin\Debug\net8.0-windows\NAudio.WinMM.dll
+C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.csproj.AssemblyReference.cache
+C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\Avalonia\Resources.Inputs.cache
+C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\Avalonia\resources
+C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.AssemblyInfoInputs.cache
+C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.AssemblyInfo.cs
+C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.csproj.CoreCompileInputs.cache
 C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningS.62743A61.Up2Date
 C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\EveningSelfStudyClock.dll
 C:\Users\ASUS\Projects\EveningSelfStudyClock\obj\Debug\net8.0-windows\refint\EveningSelfStudyClock.dll

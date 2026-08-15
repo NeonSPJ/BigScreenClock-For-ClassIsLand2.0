@@ -1,9 +1,11 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Timers;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Media;
 using Avalonia.Threading;
 using ClassIsland.Core.Abstractions.Services;
 using ClassIsland.Shared.Enums;
@@ -22,14 +24,22 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
     private System.Timers.Timer? _updateTimer;
     private FullScreenClockWindow? _window;
 
+    /// <summary>
+    /// CI 里设置的时间偏移（秒）。正 = 打铃提前，负 = 打铃延后。
+    /// </summary>
+    private int _timeOffsetSeconds;
+
+    // 计数显示颜色：一般 = 黄，吵闹 = 红
+    private static readonly IBrush CountNormalBrush = new SolidColorBrush(Color.Parse("#ffff44"));
+    private static readonly IBrush CountNoisyBrush = new SolidColorBrush(Color.Parse("#ff5555"));
+
     private string _currentTime = "00:00:00";
     private string _currentDate = "";
     private string _currentCourseName = "";
     private int _normalCount;       // 一般 次数
     private int _noisyCount;        // 吵闹+嘈杂 次数
     private string _currentClassName = "";
-    private string _noisyDisplayText = "";
-    private readonly List<string> _classSummaries = new();
+    private readonly List<ClassSummary> _classSummaries = new();
     private bool _isWindowVisible;
     private bool _isInBreak;
     private DateTime _classStartTime;
@@ -50,6 +60,24 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         _settings.PropertyChanged += OnSettingsPropertyChanged;
     }
 
+    /// <summary>
+    /// CI 的"虚拟本地时间"（含时间偏移），用于课程定位/保护计时。
+    /// 大时钟显示仍用真实北京时间，学生看到的是准确时间。
+    /// 惰性解析 IExactTimeService，失败则降级为 DateTime.Now。
+    /// </summary>
+    private DateTime NowVirtual
+    {
+        get
+        {
+            try
+            {
+                var svc = _serviceProvider.GetService<IExactTimeService>();
+                return svc?.GetCurrentLocalDateTime() ?? DateTime.Now;
+            }
+            catch { return DateTime.Now; }
+        }
+    }
+
     private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName is nameof(PluginSettings.NoisyCooldownSeconds)
@@ -59,6 +87,9 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// 分贝属性变更：转发显示属性给全屏界面绑定，同时驱动计数逻辑。
+    /// </summary>
     private void OnDecibelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName is nameof(DecibelMeterService.NoiseLevelText)
@@ -68,11 +99,10 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
             OnPropertyChanged(args.PropertyName!);
         }
 
-        // 检测吵闹/嘈杂 → 计数
+        // 等级变化 → 计数
         if (args.PropertyName == nameof(DecibelMeterService.NoiseLevelText))
         {
-            var level = _decibelService.NoiseLevelText;
-            TryCountNoisy(level);
+            TryCountNoisy(_decibelService.NoiseLevelText);
         }
     }
 
@@ -81,26 +111,46 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         if (!_settings.ShowNoisyCounter) return;
         if (_isInBreak) return;
 
-        // 上课前 N 分钟不计数
-        if (_settings.SkipFirst3Min && (DateTime.Now - _classStartTime).TotalSeconds < 180) return;
+        // 升级：登记的「一般」在 30 秒窗口内达到吵闹/嘈杂 → 该次改为吵闹
+        if (_pendingNormalDeadline != default
+            && (level.Contains("吵闹") || level.Contains("嘈杂"))
+            && DateTime.Now <= _pendingNormalDeadline)
+        {
+            _normalCount--;
+            _noisyCount++;
+            _pendingNormalDeadline = default;
+            _lastNoisyTime = DateTime.Now; // 冷却从吵闹时刻重新计时，避免重复计数
+            UpdateNoisyDisplay();
+            return;
+        }
+
+        // 上课前 N 分钟不计数（用 CI 虚拟时间，与实际打铃对齐）
+        if (_settings.SkipFirst3Min && (NowVirtual - _classStartTime).TotalSeconds < 180) return;
 
         // 冷却
         var elapsed = (DateTime.Now - _lastNoisyTime).TotalSeconds;
         if (elapsed < _settings.NoisyCooldownSeconds) return;
 
+        bool counted = false;
+
         // 分类计数
         if (level.Contains("吵闹") || level.Contains("嘈杂"))
         {
             _noisyCount++;
+            _pendingNormalDeadline = default; // 直接到吵闹，作废任何遗留的待升级标记
             _lastNoisyTime = DateTime.Now;
-            UpdateNoisyDisplay();
+            counted = true;
         }
         else if (level == "一般")
         {
             _normalCount++;
+            _pendingNormalDeadline = DateTime.Now.AddSeconds(30); // 开启 30 秒升级窗口
             _lastNoisyTime = DateTime.Now;
-            UpdateNoisyDisplay();
+            counted = true;
         }
+
+        if (counted)
+            UpdateNoisyDisplay();
     }
 
     public string CurrentTime
@@ -134,11 +184,10 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
     public string NoiseLevelEmoji => _decibelService.NoiseLevelEmoji;
     public double NoiseLevelProgress => _decibelService.NoiseLevelProgress;
     public int DisplayLevel => _decibelService.DisplayLevel;
-    public string NoisyDisplayText
-    {
-        get => _noisyDisplayText;
-        set { _noisyDisplayText = value; OnPropertyChanged(); }
-    }
+    /// <summary>
+    /// 计数区域的分段显示：课程名/一般（黄）/吵闹（红）/保护提示。
+    /// </summary>
+    public ObservableCollection<NoisyDisplaySegment> NoisyDisplaySegments { get; } = new();
 
     private bool _showDecibelMeter = true;
     private bool _showCourseInfo = true;
@@ -164,6 +213,11 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
 
     private DateTime _lastNoisyTime;
 
+    /// <summary>
+    /// 待升级「一般」的 30 秒窗口截止时间。default 表示当前没有待升级的一般。
+    /// </summary>
+    private DateTime _pendingNormalDeadline;
+
     public int ClockFontSize
     {
         get => _clockFontSize;
@@ -180,9 +234,10 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         get
         {
             var parts = new List<string>();
-            parts.Add("吵闹/嘈杂记一次「吵闹」，一般记一次「一般」");
+            parts.Add("一般记一次「一般」，30 秒内升级为吵闹则改记「吵闹」");
+            parts.Add("吵闹/嘈杂记一次「吵闹」");
             parts.Add($"每次计数冷却 {_settings.NoisyCooldownSeconds} 秒");
-            if (_settings.SkipFirst3Min) parts.Add("课前 3 分钟不记录");
+            if (_settings.SkipFirst3Min) parts.Add("上课开始后 3 分钟内不记录");
             return string.Join("，", parts)
                 + "　|　⚠ 分贝仅供参考，可能受风扇、空调、开关门、脚步声等环境杂音影响";
         }
@@ -219,12 +274,13 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
             _classSummaries.Clear();
             _isInBreak = false;
             _lastNoisyTime = DateTime.MinValue;
-            NoisyDisplayText = "";
+            _pendingNormalDeadline = default;
+            NoisyDisplaySegments.Clear();
             CourseInfoText = "";
             LoadTodaySchedule();
             SubscribeToClassEvents();
 
-            // 重新订阅分贝事件
+            // 重新订阅分贝事件（先退订再订阅，保证不累积）
             _decibelService.PropertyChanged -= OnDecibelPropertyChanged;
             _decibelService.PropertyChanged += OnDecibelPropertyChanged;
 
@@ -283,7 +339,11 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         }
         catch { }
 
-        UpdateCourseInfo(now);
+        // 课程定位用 CI 虚拟时间（与实际打铃对齐）
+        UpdateCourseInfo(NowVirtual);
+
+        // 刷新计数区域（保护倒计时需要每秒更新）
+        UpdateNoisyDisplay();
     }
 
     private void LoadTodaySchedule()
@@ -299,6 +359,8 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
                 using var doc = JsonDocument.Parse(File.ReadAllText(settingsPath));
                 if (doc.RootElement.TryGetProperty("SelectedProfile", out var sp))
                     profileFileName = sp.GetString() ?? "7.json";
+                if (doc.RootElement.TryGetProperty("TimeOffsetSeconds", out var offset))
+                    _timeOffsetSeconds = offset.GetInt32();
             }
             var profilePath = Path.Combine(dataDir, "Profiles", profileFileName);
             if (!File.Exists(profilePath)) return;
@@ -381,18 +443,32 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
 
         if (current != null && current.IsClass && !string.IsNullOrEmpty(current.SubjectName))
         {
-            // 上课中：显示当前课程
-            CourseInfoText = $"当前课程为 {current.SubjectName}   {current.Start:hh\\:mm} — {current.End:hh\\:mm}";
+            // 上课中：显示当前课程（含实际打铃时间，如有偏移）
+            CourseInfoText = $"当前课程为 {current.SubjectName}   {current.Start:hh\\:mm} — {current.End:hh\\:mm}{FormatBellTime(current)}";
         }
         else if (_isInBreak && nextClass != null)
         {
             // 课间：显示下节课程
-            CourseInfoText = $"下节课程为 {nextClass.SubjectName}   {nextClass.Start:hh\\:mm} — {nextClass.End:hh\\:mm}";
+            CourseInfoText = $"下节课程为 {nextClass.SubjectName}   {nextClass.Start:hh\\:mm} — {nextClass.End:hh\\:mm}{FormatBellTime(nextClass)}";
         }
         else
         {
             CourseInfoText = "";
         }
+    }
+
+    /// <summary>
+    /// 把课表时间换算成实际打铃时间（北京真实时间）的说明文字。
+    /// 实际打铃时间 = 课表时间 - TimeOffsetSeconds。无偏移时返回空串。
+    /// </summary>
+    private string FormatBellTime(TimeSlot slot)
+    {
+        if (_timeOffsetSeconds == 0) return "";
+        var offset = TimeSpan.FromSeconds(_timeOffsetSeconds);
+        var bellStart = slot.Start - offset;
+        var bellEnd = slot.End - offset;
+        var fmt = _timeOffsetSeconds % 60 == 0 ? @"hh\:mm" : @"hh\:mm\:ss";
+        return $"（实际打铃 {bellStart.ToString(fmt)} — {bellEnd.ToString(fmt)}）";
     }
 
     private void SetMainWindowVisible(bool visible)
@@ -429,14 +505,33 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         catch { }
     }
 
-    private string BuildSummary()
+    /// <summary>
+    /// 从课表里查出当前课程的开始时间（用 CI 虚拟时间定位，与实际打铃对齐）。
+    /// 如果课表没加载或找不到，返回 null，调用方降级使用虚拟时间。
+    /// </summary>
+    private DateTime? LookupActualClassStart(string subjectName)
     {
-        if (string.IsNullOrEmpty(_currentClassName) || (_normalCount == 0 && _noisyCount == 0))
-            return "";
-        var parts = new List<string>();
-        if (_normalCount > 0) parts.Add($"一般 {_normalCount} 次");
-        if (_noisyCount > 0) parts.Add($"吵闹 {_noisyCount} 次");
-        return $"上节课 {_currentClassName}  {string.Join("  ", parts)}";
+        if (string.IsNullOrEmpty(subjectName) || _todaySlots.Count == 0) return null;
+        var now = NowVirtual;
+        foreach (var slot in _todaySlots)
+        {
+            if (slot.IsClass && slot.SubjectName == subjectName
+                && now.TimeOfDay >= slot.Start && now.TimeOfDay < slot.End)
+            {
+                return now.Date + slot.Start;
+            }
+        }
+        return null;
+    }
+
+    private ClassSummary BuildSummary()
+    {
+        return new ClassSummary
+        {
+            ClassName = _currentClassName,
+            Normal = _normalCount,
+            Noisy = _noisyCount
+        };
     }
 
     private void OnTimeStateChanged(object? sender, EventArgs e)
@@ -455,12 +550,13 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
                     if (!string.IsNullOrEmpty(_currentClassName) && _currentClassName != subjectName)
                     {
                         var summary = BuildSummary();
-                        if (!string.IsNullOrEmpty(summary)) _classSummaries.Add(summary);
+                        if (summary.Normal > 0 || summary.Noisy > 0) _classSummaries.Add(summary);
                     }
                     _currentClassName = subjectName;
                     _normalCount = 0;
                     _noisyCount = 0;
-                    _classStartTime = DateTime.Now;
+                    _pendingNormalDeadline = default;
+                    _classStartTime = LookupActualClassStart(subjectName) ?? NowVirtual;
                     _isInBreak = false;
                     UpdateNoisyDisplay();
                 }
@@ -468,8 +564,7 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
                 {
                     if (!string.IsNullOrEmpty(_currentClassName) && (_normalCount > 0 || _noisyCount > 0))
                     {
-                        var summary = BuildSummary();
-                        if (!string.IsNullOrEmpty(summary)) _classSummaries.Add(summary);
+                        _classSummaries.Add(BuildSummary());
                     }
                     _isInBreak = true;
                     UpdateNoisyDisplay();
@@ -481,22 +576,45 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
 
     private void UpdateNoisyDisplay()
     {
-        if (!_settings.ShowNoisyCounter)
-        {
-            NoisyDisplayText = "";
-            return;
-        }
+        NoisyDisplaySegments.Clear();
+        if (!_settings.ShowNoisyCounter) return;
+
         if (_isInBreak)
         {
-            NoisyDisplayText = _classSummaries.Count > 0 ? _classSummaries[^1] : "";
+            if (_classSummaries.Count > 0)
+            {
+                var s = _classSummaries[^1];
+                NoisyDisplaySegments.Add(new NoisyDisplaySegment { Text = $"上节课 {s.ClassName}" });
+                if (s.Normal > 0)
+                    NoisyDisplaySegments.Add(new NoisyDisplaySegment { Text = $"  一般 {s.Normal} 次", Foreground = CountNormalBrush });
+                if (s.Noisy > 0)
+                    NoisyDisplaySegments.Add(new NoisyDisplaySegment { Text = $"  吵闹 {s.Noisy} 次", Foreground = CountNoisyBrush });
+            }
+            return;
+        }
+
+        if (string.IsNullOrEmpty(_currentClassName)) return;
+
+        NoisyDisplaySegments.Add(new NoisyDisplaySegment { Text = _currentClassName });
+
+        if (_normalCount > 0 || _noisyCount > 0)
+        {
+            if (_normalCount > 0)
+                NoisyDisplaySegments.Add(new NoisyDisplaySegment { Text = $"  一般 {_normalCount} 次", Foreground = CountNormalBrush });
+            if (_noisyCount > 0)
+                NoisyDisplaySegments.Add(new NoisyDisplaySegment { Text = $"  吵闹 {_noisyCount} 次", Foreground = CountNoisyBrush });
+        }
+        else if (_settings.SkipFirst3Min)
+        {
+            var remaining = 180 - (int)(NowVirtual - _classStartTime).TotalSeconds;
+            if (remaining > 0)
+                NoisyDisplaySegments.Add(new NoisyDisplaySegment { Text = $"  ⏳ 上课初期保护中（{remaining / 60}:{remaining % 60:D2} 后开始记录）" });
+            else
+                NoisyDisplaySegments.Add(new NoisyDisplaySegment { Text = "  ✅ 暂未记录到吵闹" });
         }
         else
         {
-            if (string.IsNullOrEmpty(_currentClassName)) { NoisyDisplayText = ""; return; }
-            var parts = new List<string>();
-            if (_normalCount > 0) parts.Add($"一般 {_normalCount} 次");
-            if (_noisyCount > 0) parts.Add($"吵闹 {_noisyCount} 次");
-            NoisyDisplayText = parts.Count > 0 ? $"{_currentClassName}  {string.Join("  ", parts)}" : "";
+            NoisyDisplaySegments.Add(new NoisyDisplaySegment { Text = "  ✅ 暂未记录到吵闹" });
         }
     }
 
@@ -538,4 +656,23 @@ internal class TimeSlot
     public TimeSpan End { get; set; }
     public bool IsClass { get; set; }
     public string? SubjectName { get; set; }
+}
+
+/// <summary>
+/// 一节课的吵闹记录摘要（课间/换课时显示用）。
+/// </summary>
+internal class ClassSummary
+{
+    public string ClassName { get; set; } = "";
+    public int Normal { get; set; }
+    public int Noisy { get; set; }
+}
+
+/// <summary>
+/// 计数区域的单个显示片段（带颜色，用于一般/吵闹不同色）。
+/// </summary>
+public class NoisyDisplaySegment
+{
+    public string Text { get; set; } = "";
+    public IBrush Foreground { get; set; } = new SolidColorBrush(Color.Parse("#ffff44"));
 }

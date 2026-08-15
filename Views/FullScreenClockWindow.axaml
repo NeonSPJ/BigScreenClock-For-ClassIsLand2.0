@@ -56,9 +56,21 @@
 
         <!-- 底部 -->
         <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,6,0,0">
-            <TextBlock Grid.Column="0" Text="{Binding NoisyDisplayText}"
-                       FontSize="24" Foreground="#ffff44"
-                       VerticalAlignment="Center" FontWeight="Bold"/>
+            <!-- 吵闹计数（分段着色：一般=黄，吵闹=红） -->
+            <ItemsControl Grid.Column="0" ItemsSource="{Binding NoisyDisplaySegments}"
+                          VerticalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Text}" Foreground="{Binding Foreground}"
+                                   FontSize="24" FontWeight="Bold"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
             <Button Grid.Column="1" Content="✕ 退出全屏时钟"
                     FontSize="15" Foreground="#ffffff44"
                     Background="#22ffffff" BorderThickness="0"
