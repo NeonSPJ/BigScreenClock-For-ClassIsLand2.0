@@ -18,6 +18,9 @@ public class Plugin : PluginBase
     public static IServiceProvider? ServiceProvider { get; set; }
     public static string? ConfigFolder { get; private set; }
 
+    private static readonly System.Timers.Timer SettingsSaveDebouncer =
+        new(400) { AutoReset = false };
+
     /// <summary>
     /// 主动保存设置到文件
     /// </summary>
@@ -37,8 +40,16 @@ public class Plugin : PluginBase
         Settings = ConfigureFileHelper.LoadConfig<PluginSettings>(
             Path.Combine(ConfigFolder, "Settings.json"));
 
-        // 任何属性变更都触发保存
-        Settings.PropertyChanged += (_, _) => SaveSettings();
+        // 设置保存防抖：拖滑条/连续修改不会狂写盘，停顿 400ms 后统一保存
+        SettingsSaveDebouncer.Elapsed += (_, _) =>
+        {
+            try { SaveSettings(); } catch { }
+        };
+        Settings.PropertyChanged += (_, _) =>
+        {
+            SettingsSaveDebouncer.Stop();
+            SettingsSaveDebouncer.Start();
+        };
 
         services.AddSingleton(Settings);
 

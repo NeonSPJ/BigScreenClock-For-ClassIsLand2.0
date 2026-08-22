@@ -6,16 +6,16 @@
         SystemDecorations="None"
         ShowInTaskbar="False"
         CanResize="False"
-        Background="#000000"
+        Background="{Binding BackgroundColor}"
         FontFamily="Microsoft YaHei,SimHei,sans-serif">
 
     <Grid RowDefinitions="Auto,*,Auto,Auto"
           Margin="40,30,40,18">
 
-        <!-- 日期 -->
+        <!-- 日期（右上角，连点 7 次弹出关于窗口） -->
         <TextBlock Grid.Row="0" Text="{Binding CurrentDate}"
                    FontSize="22" Foreground="#66ffffff"
-                   HorizontalAlignment="Right"/>
+                   HorizontalAlignment="Right" PointerPressed="DateText_PointerPressed"/>
 
         <!-- 主体 -->
         <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="20">
@@ -23,7 +23,7 @@
             <TextBlock Text="{Binding CurrentTime}"
                        FontSize="{Binding ClockFontSize}"
                        FontWeight="Bold"
-                       Foreground="#ffffff"
+                       Foreground="{Binding FontColor}"
                        FontFamily="Consolas,monospace"
                        HorizontalAlignment="Center"/>
 
@@ -56,21 +56,25 @@
 
         <!-- 底部 -->
         <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,6,0,0">
-            <!-- 吵闹计数（分段着色：一般=黄，吵闹=红） -->
-            <ItemsControl Grid.Column="0" ItemsSource="{Binding NoisyDisplaySegments}"
-                          VerticalAlignment="Center">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding Text}" Foreground="{Binding Foreground}"
-                                   FontSize="24" FontWeight="Bold"/>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <!-- 吵闹计数（分段着色：一般=黄，吵闹=红）。鼠标悬停上方时在计数区上方弹出记录规则 -->
+            <Border Grid.Column="0" VerticalAlignment="Center"
+                    x:Name="CounterAreaBorder"
+                    PointerEntered="CounterArea_PointerEntered"
+                    PointerExited="CounterArea_PointerExited">
+                <ItemsControl ItemsSource="{Binding NoisyDisplaySegments}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Text}" Foreground="{Binding Foreground}"
+                                       FontSize="24" FontWeight="Bold"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
             <Button Grid.Column="1" Content="✕ 退出全屏时钟"
                     FontSize="15" Foreground="#ffffff44"
                     Background="#22ffffff" BorderThickness="0"
@@ -86,10 +90,27 @@
             </Button>
         </Grid>
 
-        <!-- 记录规则 + 免责声明 -->
-        <TextBlock Grid.Row="3" Text="{Binding RulesText}"
-                   FontSize="12" Foreground="#55ffffff"
-                   HorizontalAlignment="Center" TextAlignment="Center"
-                   TextWrapping="Wrap" Margin="0,10,0,0"/>
+        <!-- 免责声明（始终显示） -->
+        <StackPanel Grid.Row="3" Margin="0,10,0,0" Spacing="4">
+            <TextBlock Text="{Binding DisclaimerText}"
+                       FontSize="12" Foreground="#55ffffff"
+                       HorizontalAlignment="Center" TextAlignment="Center"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- 记录规则：鼠标悬停计数区域时在其上方弹出。独立浮层（Popup 不占布局），
+             避免规则出现/消失导致计数区上下位移、鼠标反复脱离引发的排版抖动 -->
+        <Popup x:Name="RulesPopup"
+               Placement="Top"
+               VerticalOffset="-8"
+               IsOpen="{Binding ShowCountRules}"
+               IsLightDismissEnabled="False">
+            <Border Background="#14141f" CornerRadius="10" Padding="16,10"
+                    BorderBrush="#44ffffff" BorderThickness="1" MaxWidth="720">
+                <TextBlock Text="{Binding CountRulesText}"
+                           FontSize="13" Foreground="#ddffffff"
+                           TextAlignment="Center" TextWrapping="Wrap"/>
+            </Border>
+        </Popup>
     </Grid>
 </Window>

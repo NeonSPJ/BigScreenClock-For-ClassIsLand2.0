@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="EveningSelfStudyClock.Views.AboutPopupWindow"
+        Title="关于 大屏时钟"
+        Width="460" Height="240"
+        SystemDecorations="None"
+        ShowInTaskbar="False"
+        Topmost="True"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="#14141f"
+        FontFamily="Microsoft YaHei,SimHei,sans-serif">
+
+    <StackPanel Margin="24,18" Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Center">
+        <TextBlock Text="🎉 大屏时钟" FontSize="22" FontWeight="Bold" Foreground="#ffffff"
+                   HorizontalAlignment="Center"/>
+        <TextBlock Text="制作者：Human-air" FontSize="15" Foreground="#ccffffff"
+                   HorizontalAlignment="Center"/>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
+            <TextBlock x:Name="VersionNumberText" FontSize="15" Foreground="#ffffff"
+                       VerticalAlignment="Center"/>
+            <TextBlock x:Name="VersionTypeText" FontSize="13" FontWeight="Bold"
+                       VerticalAlignment="Center"/>
+        </StackPanel>
+        <TextBlock x:Name="GitHubLinkText"
+                   Text="https://github.com/Human-air/BigScreenClock-For-ClassIsLand2.0"
+                   FontSize="12" Foreground="#0066cc" TextDecorations="Underline"
+                   HorizontalAlignment="Center" Cursor="Hand"
+                   TextWrapping="Wrap" TextAlignment="Center"/>
+        <TextBlock Text="点击链接打开仓库，点击窗口外自动关闭" FontSize="11" Foreground="#66ffffff"
+                   HorizontalAlignment="Center"/>
+    </StackPanel>
+</Window>

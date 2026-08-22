@@ -8,6 +8,7 @@ using ClassIsland.Core.Abstractions.Controls;
 using ClassIsland.Core.Attributes;
 using ClassIsland.Core.Enums.SettingsWindow;
 using EveningSelfStudyClock.Models;
+using EveningSelfStudyClock.Services;
 using EveningSelfStudyClock.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -130,26 +131,94 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
         catch { }
     }
 
-    // ===== 分贝阈值 =====
+    // ===== 分贝阈值（带范围校验，避免非法值导致显示/检测异常） =====
     public string DecibelQuietThresholdText
     {
         get => _settings.DecibelQuietThreshold.ToString("F4");
-        set { if (double.TryParse(value, out var v)) _settings.DecibelQuietThreshold = v; }
+        set { SetThreshold(nameof(DecibelQuietThresholdText), value, v => _settings.DecibelQuietThreshold = v); }
     }
     public string DecibelGoodThresholdText
     {
         get => _settings.DecibelGoodThreshold.ToString("F4");
-        set { if (double.TryParse(value, out var v)) _settings.DecibelGoodThreshold = v; }
+        set { SetThreshold(nameof(DecibelGoodThresholdText), value, v => _settings.DecibelGoodThreshold = v); }
     }
     public string DecibelNormalThresholdText
     {
         get => _settings.DecibelNormalThreshold.ToString("F4");
-        set { if (double.TryParse(value, out var v)) _settings.DecibelNormalThreshold = v; }
+        set { SetThreshold(nameof(DecibelNormalThresholdText), value, v => _settings.DecibelNormalThreshold = v); }
     }
     public string DecibelNoisyThresholdText
     {
         get => _settings.DecibelNoisyThreshold.ToString("F4");
-        set { if (double.TryParse(value, out var v)) _settings.DecibelNoisyThreshold = v; }
+        set { SetThreshold(nameof(DecibelNoisyThresholdText), value, v => _settings.DecibelNoisyThreshold = v); }
+    }
+
+    private void SetThreshold(string propName, string value, Action<double> setter)
+    {
+        if (double.TryParse(value, out var v))
+        {
+            setter(Math.Clamp(v, 0.0001, 1.0));
+            // 回写标准化值，避免文本框残留非法输入
+            OnPropertyChanged(propName);
+        }
+    }
+
+    // ===== 记录参数 =====
+    public double NoisySustainSeconds
+    {
+        get => _settings.NoisySustainSeconds;
+        set
+        {
+            _settings.NoisySustainSeconds = value;
+            OnPropertyChanged(nameof(NoisySustainSeconds));
+            OnPropertyChanged(nameof(NoisySustainSecondsText));
+        }
+    }
+    public string NoisySustainSecondsText => $"{_settings.NoisySustainSeconds:0.#} 秒";
+
+    public int NoisyCooldownSeconds
+    {
+        get => _settings.NoisyCooldownSeconds;
+        set
+        {
+            _settings.NoisyCooldownSeconds = value;
+            OnPropertyChanged(nameof(NoisyCooldownSeconds));
+            OnPropertyChanged(nameof(NoisyCooldownSecondsText));
+        }
+    }
+    public string NoisyCooldownSecondsText => $"{_settings.NoisyCooldownSeconds} 秒";
+
+    public bool SkipFirst3Min
+    {
+        get => _settings.SkipFirst3Min;
+        set
+        {
+            _settings.SkipFirst3Min = value;
+            OnPropertyChanged(nameof(SkipFirst3Min));
+            OnPropertyChanged(nameof(SkipFirstMinutes));
+        }
+    }
+
+    public int SkipFirstMinutes
+    {
+        get => _settings.SkipFirstMinutes;
+        set
+        {
+            _settings.SkipFirstMinutes = value;
+            OnPropertyChanged(nameof(SkipFirstMinutes));
+            OnPropertyChanged(nameof(SkipFirstMinutesText));
+        }
+    }
+    public string SkipFirstMinutesText => $"{_settings.SkipFirstMinutes} 分钟";
+
+    public bool EnableNoiseDebugLog
+    {
+        get => _settings.EnableNoiseDebugLog;
+        set
+        {
+            _settings.EnableNoiseDebugLog = value;
+            OnPropertyChanged(nameof(EnableNoiseDebugLog));
+        }
     }
 
     public bool ShowDecibelMeter

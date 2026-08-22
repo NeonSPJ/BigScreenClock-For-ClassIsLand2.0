@@ -22,5 +22,8 @@ build_property.EnableGeneratedComInterfaceComImportInterop =
 [C:/Users/ASUS/Projects/EveningSelfStudyClock/Settings/SettingsPage.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
+[C:/Users/ASUS/Projects/EveningSelfStudyClock/Views/AboutPopupWindow.axaml]
+build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
+
 [C:/Users/ASUS/Projects/EveningSelfStudyClock/Views/FullScreenClockWindow.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml

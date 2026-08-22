@@ -15,12 +15,14 @@ public class PluginSettings : INotifyPropertyChanged
     private string _backgroundColor = "#000000";
     private string _fontColor = "#ffffff";
     private string _accentColor = "#4CAF50";
-    private int _microphoneDeviceIndex;
     private bool _showDecibelMeter = true;
     private bool _showCourseInfo = true;
     private bool _showNoisyCounter = true;
     private int _noisyCooldownSeconds = 60;
     private bool _skipFirst3Min = true;
+    private int _skipFirstMinutes = 3;
+    private double _noisySustainSeconds = 1.5;
+    private bool _enableNoiseDebugLog;
     private int _clockFontSize = 180;
     private string _windowTitle = "大屏时钟";
 
@@ -102,15 +104,6 @@ public class PluginSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// 选择的麦克风设备索引
-    /// </summary>
-    public int MicrophoneDeviceIndex
-    {
-        get => _microphoneDeviceIndex;
-        set { _microphoneDeviceIndex = value; OnPropertyChanged(); }
-    }
-
-    /// <summary>
     /// 是否显示教室分贝
     /// </summary>
     public bool ShowDecibelMeter
@@ -153,6 +146,33 @@ public class PluginSettings : INotifyPropertyChanged
     {
         get => _skipFirst3Min;
         set { _skipFirst3Min = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 上课初期保护时长（分钟）
+    /// </summary>
+    public int SkipFirstMinutes
+    {
+        get => _skipFirstMinutes;
+        set { _skipFirstMinutes = Math.Clamp(value, 0, 10); OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 持续判定时长（秒）：等级连续保持该时长才记一次事件
+    /// </summary>
+    public double NoisySustainSeconds
+    {
+        get => _noisySustainSeconds;
+        set { _noisySustainSeconds = Math.Clamp(value, 0.5, 5.0); OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 是否输出噪音调试日志（NoiseDebugLog.csv），用于收集真实数据校准阈值
+    /// </summary>
+    public bool EnableNoiseDebugLog
+    {
+        get => _enableNoiseDebugLog;
+        set { _enableNoiseDebugLog = value; OnPropertyChanged(); }
     }
 
     /// <summary>

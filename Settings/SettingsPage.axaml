@@ -11,7 +11,7 @@
                 <Border Background="#1e1e2e" CornerRadius="8" Padding="14,12">
                     <StackPanel Spacing="8">
                         <TextBlock Text="⚙ 显示开关" FontSize="17" FontWeight="Bold" Foreground="#ffffff"/>
-                        <CheckBox IsChecked="{Binding ShowDecibelMeter}" FontSize="14" Foreground="#ffffff">🎤 教室分贝</CheckBox>
+                        <CheckBox IsChecked="{Binding ShowDecibelMeter}" FontSize="14" Foreground="#ffffff">🎤 教室音量</CheckBox>
                         <CheckBox IsChecked="{Binding ShowCourseInfo}" FontSize="14" Foreground="#ffffff">📋 课程信息</CheckBox>
                         <CheckBox IsChecked="{Binding ShowNoisyCounter}" FontSize="14" Foreground="#ffffff">📊 吵闹计数</CheckBox>
                     </StackPanel>
@@ -44,10 +44,12 @@
                     </StackPanel>
                 </Border>
 
-                <!-- 分贝阈值 -->
+                <!-- 音量检测 -->
                 <Border Background="#1e1e2e" CornerRadius="8" Padding="14,12">
                     <StackPanel Spacing="8">
-                        <TextBlock Text="🔊 噪音等级阈值 (RMS)" FontSize="17" FontWeight="Bold" Foreground="#ffffff"/>
+                        <TextBlock Text="🔊 音量检测" FontSize="17" FontWeight="Bold" Foreground="#ffffff"/>
+                        <TextBlock Text="使用系统默认麦克风采集" FontSize="11" Foreground="#88ffffff"/>
+                        <TextBlock Text="等级阈值 (RMS)" FontSize="12" Foreground="#aaffffff" Margin="0,4,0,0"/>
                         <Grid ColumnDefinitions="Auto,*,Auto" RowSpacing="6" ColumnSpacing="8"
                               RowDefinitions="Auto,Auto,Auto,Auto,Auto">
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="安静" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
@@ -58,7 +60,37 @@
                             <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding DecibelNormalThresholdText}" FontSize="12" Padding="4"/>
                             <TextBlock Grid.Row="3" Grid.Column="0" Text="吵闹" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
                             <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding DecibelNoisyThresholdText}" FontSize="12" Padding="4"/>
-                            <TextBlock Grid.Row="4" Grid.ColumnSpan="2" Text="超过吵闹 = 「嘈杂」" FontSize="11" Foreground="#66ffffff"/>
+                            <TextBlock Grid.Row="4" Grid.ColumnSpan="2" Text="超过吵闹 = 「嘈杂」；阈值建议从小到大填写" FontSize="11" Foreground="#66ffffff"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- 记录参数 -->
+                <Border Background="#1e1e2e" CornerRadius="8" Padding="14,12">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="🧮 记录参数" FontSize="17" FontWeight="Bold" Foreground="#ffffff"/>
+                        <Grid ColumnDefinitions="Auto,*,Auto" RowSpacing="6" ColumnSpacing="8"
+                              RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="持续判定" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
+                            <Slider Grid.Row="0" Grid.Column="1" Value="{Binding NoisySustainSeconds}"
+                                    Minimum="0.5" Maximum="5" TickFrequency="0.1"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding NoisySustainSecondsText}" FontSize="12"
+                                       Foreground="#ffffff" Width="56" TextAlignment="Center" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="计数冷却" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
+                            <Slider Grid.Row="1" Grid.Column="1" Value="{Binding NoisyCooldownSeconds}"
+                                    Minimum="30" Maximum="180" TickFrequency="10"/>
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding NoisyCooldownSecondsText}" FontSize="12"
+                                       Foreground="#ffffff" Width="56" TextAlignment="Center" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="保护时长" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
+                            <Slider Grid.Row="2" Grid.Column="1" Value="{Binding SkipFirstMinutes}"
+                                    Minimum="0" Maximum="10" TickFrequency="1"
+                                    IsEnabled="{Binding SkipFirst3Min}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding SkipFirstMinutesText}" FontSize="12"
+                                       Foreground="#ffffff" Width="56" TextAlignment="Center" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Row="3" Grid.ColumnSpan="3" IsChecked="{Binding SkipFirst3Min}"
+                                      FontSize="13" Foreground="#ffffff">🛡 上课初期保护（上课开始后前 N 分钟不计数）</CheckBox>
+                            <CheckBox Grid.Row="4" Grid.ColumnSpan="3" IsChecked="{Binding EnableNoiseDebugLog}"
+                                      FontSize="13" Foreground="#ffffff">🛠 调试日志（输出 NoiseDebugLog.csv，用于收集真实数据校准阈值）</CheckBox>
                         </Grid>
                     </StackPanel>
                 </Border>
@@ -88,10 +120,10 @@
                 <Border Background="#1e1e2e" CornerRadius="8" Padding="14,12">
                     <StackPanel Spacing="4">
                         <TextBlock Text="📝 记录规则" FontSize="17" FontWeight="Bold" Foreground="#ffffff"/>
-                        <TextBlock Text="• 一般：音量达到「💬 一般」等级时计数；若 30 秒内升级为吵闹，该次改记「吵闹」" FontSize="12" Foreground="#aaffffff" TextWrapping="Wrap"/>
-                        <TextBlock Text="• 吵闹：音量达到「🗣️ 吵闹」或「📢 嘈杂」等级时直接计数" FontSize="12" Foreground="#aaffffff" TextWrapping="Wrap"/>
-                        <TextBlock Text="• 每次计数后需等待设置的冷却时间（默认 60 秒）" FontSize="12" Foreground="#aaffffff" TextWrapping="Wrap"/>
-                        <TextBlock Text="• 开启「上课初期保护」后，上课开始后 3 分钟内不计数" FontSize="12" Foreground="#aaffffff" TextWrapping="Wrap"/>
+                        <TextBlock Text="• 音量需持续达到「一般/吵闹/嘈杂」一定时长（可调，默认 1.5 秒）才记一次，咳嗽、喷嚏等瞬时噪音不计数" FontSize="12" Foreground="#aaffffff" TextWrapping="Wrap"/>
+                        <TextBlock Text="• 一段噪音按一般/吵闹的时长占比归属：吵闹占一半及以上记「吵闹」，否则记「一般」" FontSize="12" Foreground="#aaffffff" TextWrapping="Wrap"/>
+                        <TextBlock Text="• 一般、吵闹分别有冷却时间（可调），互不影响" FontSize="12" Foreground="#aaffffff" TextWrapping="Wrap"/>
+                        <TextBlock Text="• 开启「上课初期保护」后，上课开始后前 N 分钟不计数" FontSize="12" Foreground="#aaffffff" TextWrapping="Wrap"/>
                         <TextBlock Text="⚠ 免责声明：分贝记录仅供参考，可能受教室风扇、空调、开关门、桌椅移动、脚步声等环境杂音影响，不代表真实纪律状况。" FontSize="12" Foreground="#ffaa44" TextWrapping="Wrap" Margin="0,6,0,0"/>
                     </StackPanel>
                 </Border>
