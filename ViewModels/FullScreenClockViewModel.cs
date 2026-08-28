@@ -86,10 +86,10 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
 
     private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName is nameof(PluginSettings.NoisyCooldownSeconds)
-            or nameof(PluginSettings.SkipFirst3Min)
+        if (args.PropertyName is nameof(PluginSettings.SkipFirst3Min)
             or nameof(PluginSettings.SkipFirstMinutes)
-            or nameof(PluginSettings.NoisySustainSeconds))
+            or nameof(PluginSettings.NoisySustainSeconds)
+            or nameof(PluginSettings.FallWindowSeconds))
         {
             OnPropertyChanged(nameof(CountRulesText));
         }
@@ -106,6 +106,10 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         {
             OnPropertyChanged(args.PropertyName!);
         }
+        else if (args.PropertyName == nameof(DecibelMeterService.CurrentSegmentLevel))
+        {
+            UpdateRecording();
+        }
     }
 
     /// <summary>
@@ -116,7 +120,7 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
     {
         Dispatcher.UIThread.Post(() =>
         {
-            var decision = _counter.OnEvent(e.Level, DateTime.Now, IsInProtection());
+            var decision = _counter.OnEvent(e.Level, IsInProtection());
             if (decision != CountDecision.None)
                 UpdateNoisyDisplay();
         });
@@ -153,6 +157,36 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
     public string BackgroundColor => _settings.BackgroundColor;
     public string FontColor => _settings.FontColor;
     public string AccentColor => _settings.AccentColor;
+    public string ProgressColor => _settings.ProgressColor;
+
+    /// <summary>进度条「已进行」部分颜色（深色，不透明）。</summary>
+    public IBrush ProgressFillBrush => new SolidColorBrush(Color.Parse(_settings.ProgressColor));
+
+    /// <summary>进度条「未进行」部分颜色（浅色，由 ProgressColor 半透明派生）。</summary>
+    public IBrush ProgressTrackBrush
+    {
+        get
+        {
+            var c = Color.Parse(_settings.ProgressColor);
+            return new SolidColorBrush(new Color((byte)(c.A / 4), c.R, c.G, c.B));
+        }
+    }
+
+    /// <summary>
+    /// 触发所有外观属性变更通知，让窗口绑定重新求值。
+    /// 窗口从 Hide 退出后复用时，这些表达式体 getter 不会自动刷新，需主动通知。
+    /// </summary>
+    private void RefreshAppearanceBindings()
+    {
+        OnPropertyChanged(nameof(BackgroundColor));
+        OnPropertyChanged(nameof(FontColor));
+        OnPropertyChanged(nameof(AccentColor));
+        OnPropertyChanged(nameof(ProgressColor));
+        OnPropertyChanged(nameof(ProgressFillBrush));
+        OnPropertyChanged(nameof(ProgressTrackBrush));
+        OnPropertyChanged(nameof(ClockFontSize));
+        OnPropertyChanged(nameof(WindowTitle));
+    }
     public string NoiseLevelText => _decibelService.NoiseLevelText;
     public string NoiseLevelEmoji => _decibelService.NoiseLevelEmoji;
     public double NoiseLevelProgress => _decibelService.NoiseLevelProgress;
@@ -170,6 +204,49 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
     {
         get => _showCountRules;
         set { _showCountRules = value; OnPropertyChanged(); }
+    }
+
+    // ===== 「正在记录」提示（段起算后实时显示，一般黄 / 吵闹红） =====
+
+    private bool _isRecordingVisible;
+    private string _recordingText = "";
+    private IBrush _recordingForeground = CountNormalBrush;
+
+    /// <summary>是否显示「正在记录」提示（有段且已起算、上课中）。</summary>
+    public bool IsRecordingVisible
+    {
+        get => _isRecordingVisible;
+        set { _isRecordingVisible = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>「正在记录：一般」/「正在记录：吵闹」。</summary>
+    public string RecordingText
+    {
+        get => _recordingText;
+        set { _recordingText = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>提示颜色：一般=黄，吵闹=红。</summary>
+    public IBrush RecordingForeground
+    {
+        get => _recordingForeground;
+        set { _recordingForeground = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 根据检测器的实时段归属刷新「正在记录」提示。
+    /// 仅在计数可见且上课时段显示；段起算前/段结束后隐藏。
+    /// </summary>
+    private void UpdateRecording()
+    {
+        var seg = _decibelService.CurrentSegmentLevel;
+        bool show = seg.HasValue && _settings.ShowNoisyCounter
+            && !_isInBreak && !string.IsNullOrEmpty(_currentClassName);
+        IsRecordingVisible = show;
+        if (!show) return;
+        var noisy = seg == NoiseLevel.Noisy;
+        RecordingText = noisy ? "正在记录：吵闹" : "正在记录：一般";
+        RecordingForeground = noisy ? CountNoisyBrush : CountNormalBrush;
     }
 
     private bool _showDecibelMeter = true;
@@ -194,6 +271,24 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         set { _courseInfoText = value; OnPropertyChanged(); }
     }
 
+    private double _courseProgress;
+
+    /// <summary>当前时段进行进度（0~100）。上课=本课进度，课间=当前休息进度。</summary>
+    public double CourseProgress
+    {
+        get => _courseProgress;
+        set { _courseProgress = value; OnPropertyChanged(); }
+    }
+
+    private bool _showCourseProgress;
+
+    /// <summary>是否显示进度条（当前存在时段槽时显示，放学/无课隐藏）。</summary>
+    public bool ShowCourseProgress
+    {
+        get => _showCourseProgress;
+        set { _showCourseProgress = value; OnPropertyChanged(); }
+    }
+
     public int ClockFontSize
     {
         get => _clockFontSize;
@@ -211,10 +306,9 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         {
             var parts = new List<string>
             {
-                $"一般：持续 {_settings.NoisySustainSeconds:0.#} 秒记一次",
-                $"吵闹/嘈杂：持续 {_settings.NoisySustainSeconds:0.#} 秒记一次「吵闹」",
+                $"一段噪音累计满 {_settings.NoisySustainSeconds:0.#} 秒记一次",
+                $"一段内回落不超过 {_settings.FallWindowSeconds:0.#} 秒并成一次",
                 "一段噪音按一般/吵闹的时长占比归属：吵闹占一半及以上记「吵闹」，否则记「一般」",
-                $"一般、吵闹各自冷却 {_settings.NoisyCooldownSeconds} 秒",
             };
             if (_settings.SkipFirst3Min) parts.Add($"上课开始后 {_settings.SkipFirstMinutes} 分钟内不记录");
             return string.Join("，", parts);
@@ -235,6 +329,9 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
             ShowDecibelMeter = _settings.ShowDecibelMeter;
             ShowCourseInfo = _settings.ShowCourseInfo;
             ClockFontSize = _settings.ClockFontSize;
+            // 外观颜色属性是直接读 _settings 的 getter，窗口从 Hide 退出后复用不自动刷新，
+            // 主动触发通知让绑定重新求值（修复：改完颜色后要重启 CI 才生效的问题）
+            RefreshAppearanceBindings();
 
             if (_window == null)
             {
@@ -439,6 +536,19 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         {
             CourseInfoText = "";
         }
+
+        // 进度条：上课槽或课间槽都显示「当前时间状态」的进行进度。
+        // time 与课程定位是同一时刻（NowVirtual），current 是同一时段槽 → 时间显示与进度天然一致。
+        if (current != null)
+        {
+            CourseProgress = ProgressCalculator.Calc(time, current.Start, current.End);
+            ShowCourseProgress = true;
+        }
+        else
+        {
+            ShowCourseProgress = false;
+            CourseProgress = 0;
+        }
     }
 
     /// <summary>
@@ -554,6 +664,7 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
                     _classStartTime = LookupActualClassStart(subjectName) ?? NowVirtual;
                     _isInBreak = false;
                     UpdateNoisyDisplay();
+                    UpdateRecording();
                 }
                 else if (state == ClassIsland.Shared.Enums.TimeState.Breaking)
                 {
@@ -564,6 +675,7 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
                     _counter.SetBreak(true);
                     _isInBreak = true;
                     UpdateNoisyDisplay();
+                    UpdateRecording();
                 }
             }
             catch { }

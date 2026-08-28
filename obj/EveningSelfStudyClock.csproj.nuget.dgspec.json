@@ -43,6 +43,11 @@
         "net8.0-windows7.0": {
           "targetAlias": "net8.0-windows",
           "dependencies": {
+            "Avalonia.Controls.ColorPicker": {
+              "include": "Compile, Build, ContentFiles, Analyzers, BuildTransitive",
+              "target": "Package",
+              "version": "[11.3.17, )"
+            },
             "ClassIsland.PluginSdk": {
               "include": "Compile, Build, ContentFiles, Analyzers, BuildTransitive",
               "target": "Package",

@@ -15,13 +15,14 @@ public class PluginSettings : INotifyPropertyChanged
     private string _backgroundColor = "#000000";
     private string _fontColor = "#ffffff";
     private string _accentColor = "#4CAF50";
+    private string _progressColor = "#4CAF50";
     private bool _showDecibelMeter = true;
     private bool _showCourseInfo = true;
     private bool _showNoisyCounter = true;
-    private int _noisyCooldownSeconds = 60;
     private bool _skipFirst3Min = true;
     private int _skipFirstMinutes = 3;
-    private double _noisySustainSeconds = 1.5;
+    private double _noisySustainSeconds = 1.0;
+    private double _fallWindowSeconds = 5.0;
     private bool _enableNoiseDebugLog;
     private int _clockFontSize = 180;
     private string _windowTitle = "大屏时钟";
@@ -95,12 +96,21 @@ public class PluginSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// 强调色 (HEX)，用于进度条和高亮
+    /// 强调色 (HEX)，用于分贝条和高亮
     /// </summary>
     public string AccentColor
     {
         get => _accentColor;
         set { _accentColor = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 课程进度条颜色 (HEX)。已进行部分用此色（不透明），未进行部分用半透明派生。
+    /// </summary>
+    public string ProgressColor
+    {
+        get => _progressColor;
+        set { _progressColor = value; OnPropertyChanged(); }
     }
 
     /// <summary>
@@ -131,15 +141,6 @@ public class PluginSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// 吵闹计数冷却时间 (秒)
-    /// </summary>
-    public int NoisyCooldownSeconds
-    {
-        get => _noisyCooldownSeconds;
-        set { _noisyCooldownSeconds = value; OnPropertyChanged(); }
-    }
-
-    /// <summary>
     /// 上课前 3 分钟是否不计数
     /// </summary>
     public bool SkipFirst3Min
@@ -158,12 +159,23 @@ public class PluginSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// 持续判定时长（秒）：等级连续保持该时长才记一次事件
+    /// 起算底线（秒）：一段噪音内「有效时长」（处于一般/吵闹的累计时间）达到该值，
+    /// 段结束才记一次；不足的短段（喷嚏/咳嗽）丢弃。默认 1 秒。
     /// </summary>
     public double NoisySustainSeconds
     {
         get => _noisySustainSeconds;
         set { _noisySustainSeconds = Math.Clamp(value, 0.5, 5.0); OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 回落窗口（秒）：音量掉到安静/良好后，回落不超过该值则与前面并成一段（短暂停顿不断段）；
+    /// 超过该值段才结束、记一次。默认 5 秒，范围 0~15。
+    /// </summary>
+    public double FallWindowSeconds
+    {
+        get => _fallWindowSeconds;
+        set { _fallWindowSeconds = Math.Clamp(value, 0, 15); OnPropertyChanged(); }
     }
 
     /// <summary>

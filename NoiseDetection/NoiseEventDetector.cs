@@ -23,21 +23,27 @@ public sealed class SampleResult
     public double SmoothedRms;
     public bool EventFired;
     public NoiseLevel? EventLevel;
+
+    /// <summary>
+    /// 当前段的实时归属（仅已起算且段未结束时非空），供 UI 显示「正在记录：一般/吵闹」。
+    /// </summary>
+    public NoiseLevel? SegmentLevel;
 }
 
 /// <summary>
-/// V2 噪音事件检测器（纯算法，无任何外部依赖，便于单元测试）。
-/// 职责：EMA 平滑 + 迟滞分级 + 持续判定状态机。
-/// 输入：每块原始 RMS + 真实块时长；输出：显示等级 + 持续事件。
+/// V2.1 噪音事件检测器（纯算法，无任何外部依赖，便于单元测试）。
+/// 职责：EMA 平滑 + 迟滞分级 + 「段」状态机。
+/// 输入：每块原始 RMS + 真实块时长；输出：显示等级 + 段结束事件 + 实时段归属。
 ///
-/// 「持续一段算一次」规则：
-/// - 进入可计等级（一般/吵闹）后开段，分别累计段内「一般」「吵闹」的时长；
-/// - 累计达到 ≥ SustainSeconds 产一次事件，事件归属按段内占比判定：
-///   「吵闹」时长占比 ≥ NoisyRatioThreshold（默认 0.5）→ 记吵闹，否则记一般；
-/// - 每段至多一次事件，段内一般↔吵闹来回波动不重置计时、不重触发（归属只看
-///   到触发那一刻为止的占比，触发即定格）；
-/// - 掉到不可计等级后进入宽限期（GraceSeconds），宽限期内短暂回落（如说话停顿）不断段，
-///   累计时长不清零；超过宽限期段才结束。
+/// 「一段算一次、短回落合并」规则（取代旧"连续持续 + 冷却"方案）：
+/// - 进入可计等级（一般/吵闹）后开段，段内累计「有效时长」= 真正处于一般/吵闹的时间，
+///   一般↔吵闹来回波动只影响实时归属，不重置累计；
+/// - 回落到不可计等级（安静/良好）开始回落计时，回落 ≤ FallWindowSeconds 不断段、有效时长
+///   不清零（说话之间的短暂停顿并进同一段）；回落 > FallWindowSeconds 段才结束；
+/// - 段结束结算一次：有效时长 ≥ SustainSeconds（起算底线）→ 按段内占比归属产事件
+///   （吵闹占比 ≥ NoisyRatioThreshold 记吵闹，否则记一般）；有效时长不足的短段（喷嚏/咳嗽）丢弃；
+/// - 每段至多一次事件（在段结束时），不会中途改记；
+/// - SegmentLevel 实时反映当前段起算后的临时归属（供「正在记录」提示，随占比变化切换）。
 /// </summary>
 public sealed class NoiseEventDetector
 {
@@ -47,40 +53,44 @@ public sealed class NoiseEventDetector
     public double NoisyThreshold { get; set; } = 0.08;
     public double SmoothAlpha { get; set; } = 0.2;
     public double HysteresisFactor { get; set; } = 0.8;
-    public double SustainSeconds { get; set; } = 1.5;
 
     /// <summary>
-    /// 段内「吵闹」时长占比达到该比例，本段即归属为「吵闹」；否则归属「一般」。
-    /// 用于一般↔吵闹来回波动时按主体音量判定。默认 0.5 = 吵闹占一半及以上算吵闹。
+    /// 起算底线（秒）：段内「有效时长」（处于一般/吵闹的累计时间）达到该值，
+    /// 段结束才结算一次；不足的短段（喷嚏、咳嗽）丢弃。默认 1 秒。
+    /// </summary>
+    public double SustainSeconds { get; set; } = 1.0;
+
+    /// <summary>
+    /// 回落窗口（秒）：掉到不可计等级后的容错时间。回落 ≤ 该值不断段、与前面并成一段；
+    /// 超过该值段才结束、结算一次。默认 5 秒（可调 0~15）。
+    /// </summary>
+    public double FallWindowSeconds { get; set; } = 5.0;
+
+    /// <summary>
+    /// 段内「吵闹」有效时长占比达到该比例，本段即归属「吵闹」；否则归属「一般」。默认 0.5。
     /// </summary>
     public double NoisyRatioThreshold { get; set; } = 0.5;
-
-    /// <summary>
-    /// 掉到不可计等级（良好/安静）后的宽限期（秒）。宽限期内短暂回落不断段、
-    /// 累计时长不清零，用于容忍说话之间的小停顿；超过宽限期才算段结束。
-    /// </summary>
-    public double GraceSeconds { get; set; } = 1.0;
 
     private double _smooth;
     private bool _initialized;
     private NoiseLevel _level = NoiseLevel.Quiet;
     private double _time;
 
-    // 持续段状态
-    private bool _episodeActive;          // 当前是否有可计持续段
-    private double _episodeNormalSeconds; // 段内「一般」累计时长（秒）
-    private double _episodeNoisySeconds;  // 段内「吵闹」累计时长（秒）
-    private bool _episodeFired;           // 本段是否已触发事件
-    private double _graceLeft;            // 掉到不可计等级后的剩余宽限期（秒）
+    // 段状态
+    private bool _segmentActive;           // 当前是否有段
+    private double _segmentNormalSeconds;  // 段内「一般」有效时长（秒）
+    private double _segmentNoisySeconds;   // 段内「吵闹」有效时长（秒）
+    private double _fallSeconds;           // 当前连续回落时长（秒）
+    private NoiseLevel? _segmentLevel;     // 实时归属（起算后非空）
 
     public NoiseLevel Level => _level;
     public double SmoothedRms => _smooth;
 
-    /// <summary>当前是否处于可计持续段。</summary>
-    public bool IsEpisodeActive => _episodeActive;
+    /// <summary>当前是否处于段（含回落中）。</summary>
+    public bool IsSegmentActive => _segmentActive;
 
-    /// <summary>当前段是否已触发事件。</summary>
-    public bool EpisodeFired => _episodeFired;
+    /// <summary>当前段起算后的实时归属（一般/吵闹）；未起算或无段为 null。</summary>
+    public NoiseLevel? SegmentLevel => _segmentActive ? _segmentLevel : null;
 
     public void Reset()
     {
@@ -88,11 +98,11 @@ public sealed class NoiseEventDetector
         _smooth = 0;
         _level = NoiseLevel.Quiet;
         _time = 0;
-        _episodeActive = false;
-        _episodeNormalSeconds = 0;
-        _episodeNoisySeconds = 0;
-        _episodeFired = false;
-        _graceLeft = 0;
+        _segmentActive = false;
+        _segmentNormalSeconds = 0;
+        _segmentNoisySeconds = 0;
+        _fallSeconds = 0;
+        _segmentLevel = null;
     }
 
     /// <summary>
@@ -121,47 +131,45 @@ public sealed class NoiseEventDetector
 
         if (IsCountable(_level))
         {
-            _graceLeft = 0;
-
-            if (!_episodeActive)
+            // 回到可计等级：开段（或继续段），回落计时清零
+            if (!_segmentActive)
             {
-                // 新开段
-                _episodeActive = true;
-                _episodeNormalSeconds = 0;
-                _episodeNoisySeconds = 0;
-                _episodeFired = false;
+                _segmentActive = true;
+                _segmentNormalSeconds = 0;
+                _segmentNoisySeconds = 0;
+                _segmentLevel = null;
             }
+            _fallSeconds = 0;
 
-            // 段内分别累计一般/吵闹时长（一般↔吵闹波动不影响累计，只影响占比）
-            if (_level == NoiseLevel.Noisy) _episodeNoisySeconds += dtSeconds;
-            else _episodeNormalSeconds += dtSeconds;
+            // 累计有效时长（一般/吵闹分别计）
+            if (_level == NoiseLevel.Noisy) _segmentNoisySeconds += dtSeconds;
+            else _segmentNormalSeconds += dtSeconds;
 
-            // 持续够了且本段还没触发 → 按段内占比判定归属，每段只记一次（触发即定格）
-            if (!_episodeFired)
+            // 实时归属：起算后按当前段内占比临时判定（供「正在记录」提示切换）
+            var total = _segmentNormalSeconds + _segmentNoisySeconds;
+            if (total >= SustainSeconds)
             {
-                var total = _episodeNormalSeconds + _episodeNoisySeconds;
-                if (total >= SustainSeconds)
-                {
-                    _episodeFired = true;
-                    var noisyRatio = total > 0 ? _episodeNoisySeconds / total : 0;
-                    fired = noisyRatio >= NoisyRatioThreshold ? NoiseLevel.Noisy : NoiseLevel.Normal;
-                }
+                var ratio = total > 0 ? _segmentNoisySeconds / total : 0;
+                _segmentLevel = ratio >= NoisyRatioThreshold ? NoiseLevel.Noisy : NoiseLevel.Normal;
             }
         }
-        else
+        else if (_segmentActive)
         {
-            // 掉到不可计等级：进入宽限期，宽限期过才断段
-            if (_episodeActive)
+            // 掉到不可计等级：进入回落计时，超过回落窗口段才结束
+            _fallSeconds += dtSeconds;
+            if (_fallSeconds > FallWindowSeconds)
             {
-                _graceLeft += dtSeconds;
-                if (_graceLeft >= GraceSeconds)
+                var total = _segmentNormalSeconds + _segmentNoisySeconds;
+                if (total >= SustainSeconds)
                 {
-                    _episodeActive = false;
-                    _episodeNormalSeconds = 0;
-                    _episodeNoisySeconds = 0;
-                    _episodeFired = false;
-                    _graceLeft = 0;
+                    var ratio = total > 0 ? _segmentNoisySeconds / total : 0;
+                    fired = ratio >= NoisyRatioThreshold ? NoiseLevel.Noisy : NoiseLevel.Normal;
                 }
+                _segmentActive = false;
+                _segmentNormalSeconds = 0;
+                _segmentNoisySeconds = 0;
+                _fallSeconds = 0;
+                _segmentLevel = null;
             }
         }
 
@@ -171,7 +179,8 @@ public sealed class NoiseEventDetector
             LevelChanged = prev != _level,
             SmoothedRms = _smooth,
             EventFired = fired.HasValue,
-            EventLevel = fired
+            EventLevel = fired,
+            SegmentLevel = _segmentActive ? _segmentLevel : null
         };
     }
 

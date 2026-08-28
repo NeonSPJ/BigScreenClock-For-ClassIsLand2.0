@@ -18,6 +18,10 @@
             <ExcludeAssets>runtime; native</ExcludeAssets>
         </PackageReference>
         <PackageReference Include="NAudio" Version="2.2.1" />
+        <!-- 与 ClassIsland 主程序同版本(11.3.17)；运行时主程序已加载该 DLL，故排除 runtime 避免重复打包 -->
+        <PackageReference Include="Avalonia.Controls.ColorPicker" Version="11.3.17">
+            <ExcludeAssets>runtime; native</ExcludeAssets>
+        </PackageReference>
     </ItemGroup>
 
     <ItemGroup>

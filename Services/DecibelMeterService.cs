@@ -39,6 +39,8 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
     private double _lastPostedProgress = -1;
     private bool _isMonitoring;
     private string _statusMessage = "";
+    private NoiseLevel? _currentSegmentLevel;
+    private NoiseLevel? _lastSegmentLevel;
 
     // 调试日志
     private StreamWriter? _logWriter;
@@ -98,12 +100,23 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// 当前段起算后的实时归属（一般/吵闹），供「正在记录」提示显示；无段/未起算为 null。
+    /// </summary>
+    public NoiseLevel? CurrentSegmentLevel
+    {
+        get => _currentSegmentLevel;
+        private set { _currentSegmentLevel = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>
     /// 开始监听。固定使用默认麦克风（设备 0），失败则自动搜索可用设备。
     /// </summary>
     public void StartMonitoring()
     {
         if (_isMonitoring) return;
         _detector.Reset();
+        _lastSegmentLevel = null;
+        CurrentSegmentLevel = null;
         EnsureLogWriter();
         StartMonitoringInternal();
         StartWatchdog();
@@ -245,6 +258,7 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
             _detector.NormalThreshold = _settings.DecibelNormalThreshold;
             _detector.NoisyThreshold = _settings.DecibelNoisyThreshold;
             _detector.SustainSeconds = _settings.NoisySustainSeconds;
+            _detector.FallWindowSeconds = _settings.FallWindowSeconds;
 
             // 按真实音频块时长传 dt（samples / 采样率），不假定固定 100ms，
             // 这样「持续判定时长」在现实时间上是准的
@@ -268,11 +282,19 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
                 });
             }
 
-            // 计数：持续事件驱动（事件等级已由探测器按段内占比判定）
+            // 计数：段结束结算事件（事件等级已由探测器按段内占比判定）
             if (result.EventFired && result.EventLevel.HasValue)
             {
                 NoiseEventRaised?.Invoke(this,
                     new NoiseEventRaisedEventArgs(result.EventLevel.Value));
+            }
+
+            // 「正在记录」实时状态：段归属变化（起算/切换/结束）时通知 UI
+            if (result.SegmentLevel != _lastSegmentLevel)
+            {
+                _lastSegmentLevel = result.SegmentLevel;
+                var level = result.SegmentLevel;
+                Dispatcher.UIThread.Post(() => CurrentSegmentLevel = level);
             }
 
             WriteDebugLog(rawRms, peak, result);
@@ -293,9 +315,9 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
         switch (level)
         {
             case NoiseLevel.Quiet:
-                return ("安静", "🤫", Math.Clamp(smooth / quiet * 25, 0, 25));
+                return ("安静", "🙂", Math.Clamp(smooth / quiet * 25, 0, 25));
             case NoiseLevel.Good:
-                return ("良好", "🙂", 25 + Math.Clamp((smooth - quiet) / (good - quiet) * 25, 0, 25));
+                return ("良好", "🤫", 25 + Math.Clamp((smooth - quiet) / (good - quiet) * 25, 0, 25));
             case NoiseLevel.Normal:
                 return ("一般", "💬", 50 + Math.Clamp((smooth - good) / (normal - good) * 25, 0, 25));
             default: // Noisy
@@ -342,9 +364,9 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
         if (_logWriter == null) return;
         if (!_settings.EnableNoiseDebugLog) { CloseLogWriter(); return; }
 
-        string eventState = !_detector.IsEpisodeActive ? "无段"
-            : _detector.EpisodeFired ? "已触发" : "持续中";
-        string episodeLevel = _detector.IsEpisodeActive ? _detector.Level.ToString() : "";
+        string eventState = !_detector.IsSegmentActive ? "无段"
+            : _detector.SegmentLevel.HasValue ? "已起算" : "记录中";
+        string episodeLevel = _detector.SegmentLevel?.ToString() ?? "";
 
         _logWriter.WriteLine(
             $"{DateTime.Now:HH:mm:ss.fff},{rawRms:F4},{peak:F4},{result.SmoothedRms:F4}," +

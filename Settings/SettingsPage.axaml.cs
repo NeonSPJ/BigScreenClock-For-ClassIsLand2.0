@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using System.Timers;
 using System.Windows.Input;
+using Avalonia.Media;
 using Avalonia.Threading;
 using ClassIsland.Core.Abstractions.Controls;
 using ClassIsland.Core.Attributes;
@@ -131,35 +132,81 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
         catch { }
     }
 
-    // ===== 分贝阈值（带范围校验，避免非法值导致显示/检测异常） =====
+    // ===== 分贝阈值（滑块用对数刻度 0.001~1.0，也支持直接填数字） =====
+
+    // 对数刻度：Slider 范围 -3~0 映射阈值 0.001~1.0（阈值 = 10^index）。
+    // 低值区（0.04~0.14）在线性滑块上挤成一团，对数刻度才能精细拖动。
+    private const double ThresholdSliderMin = -3.0;
+    private const double ThresholdSliderMax = 0.0;
+    private const double ThresholdMin = 0.001;
+    private const double ThresholdMax = 1.0;
+
+    public double DecibelQuietThresholdIndex
+    {
+        get => Math.Log10(_settings.DecibelQuietThreshold);
+        set
+        {
+            _settings.DecibelQuietThreshold = Math.Clamp(Math.Pow(10, value), ThresholdMin, ThresholdMax);
+            OnPropertyChanged(nameof(DecibelQuietThresholdText));
+        }
+    }
+    public double DecibelGoodThresholdIndex
+    {
+        get => Math.Log10(_settings.DecibelGoodThreshold);
+        set
+        {
+            _settings.DecibelGoodThreshold = Math.Clamp(Math.Pow(10, value), ThresholdMin, ThresholdMax);
+            OnPropertyChanged(nameof(DecibelGoodThresholdText));
+        }
+    }
+    public double DecibelNormalThresholdIndex
+    {
+        get => Math.Log10(_settings.DecibelNormalThreshold);
+        set
+        {
+            _settings.DecibelNormalThreshold = Math.Clamp(Math.Pow(10, value), ThresholdMin, ThresholdMax);
+            OnPropertyChanged(nameof(DecibelNormalThresholdText));
+        }
+    }
+    public double DecibelNoisyThresholdIndex
+    {
+        get => Math.Log10(_settings.DecibelNoisyThreshold);
+        set
+        {
+            _settings.DecibelNoisyThreshold = Math.Clamp(Math.Pow(10, value), ThresholdMin, ThresholdMax);
+            OnPropertyChanged(nameof(DecibelNoisyThresholdText));
+        }
+    }
+
     public string DecibelQuietThresholdText
     {
         get => _settings.DecibelQuietThreshold.ToString("F4");
-        set { SetThreshold(nameof(DecibelQuietThresholdText), value, v => _settings.DecibelQuietThreshold = v); }
+        set { SetThreshold(nameof(DecibelQuietThresholdText), nameof(DecibelQuietThresholdIndex), value, v => _settings.DecibelQuietThreshold = v); }
     }
     public string DecibelGoodThresholdText
     {
         get => _settings.DecibelGoodThreshold.ToString("F4");
-        set { SetThreshold(nameof(DecibelGoodThresholdText), value, v => _settings.DecibelGoodThreshold = v); }
+        set { SetThreshold(nameof(DecibelGoodThresholdText), nameof(DecibelGoodThresholdIndex), value, v => _settings.DecibelGoodThreshold = v); }
     }
     public string DecibelNormalThresholdText
     {
         get => _settings.DecibelNormalThreshold.ToString("F4");
-        set { SetThreshold(nameof(DecibelNormalThresholdText), value, v => _settings.DecibelNormalThreshold = v); }
+        set { SetThreshold(nameof(DecibelNormalThresholdText), nameof(DecibelNormalThresholdIndex), value, v => _settings.DecibelNormalThreshold = v); }
     }
     public string DecibelNoisyThresholdText
     {
         get => _settings.DecibelNoisyThreshold.ToString("F4");
-        set { SetThreshold(nameof(DecibelNoisyThresholdText), value, v => _settings.DecibelNoisyThreshold = v); }
+        set { SetThreshold(nameof(DecibelNoisyThresholdText), nameof(DecibelNoisyThresholdIndex), value, v => _settings.DecibelNoisyThreshold = v); }
     }
 
-    private void SetThreshold(string propName, string value, Action<double> setter)
+    private void SetThreshold(string propName, string indexName, string value, Action<double> setter)
     {
         if (double.TryParse(value, out var v))
         {
-            setter(Math.Clamp(v, 0.0001, 1.0));
-            // 回写标准化值，避免文本框残留非法输入
+            setter(Math.Clamp(v, ThresholdMin, ThresholdMax));
+            // 回写标准化值，避免文本框残留非法输入；同时让滑块跟随
             OnPropertyChanged(propName);
+            OnPropertyChanged(indexName);
         }
     }
 
@@ -176,17 +223,17 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
     }
     public string NoisySustainSecondsText => $"{_settings.NoisySustainSeconds:0.#} 秒";
 
-    public int NoisyCooldownSeconds
+    public double FallWindowSeconds
     {
-        get => _settings.NoisyCooldownSeconds;
+        get => _settings.FallWindowSeconds;
         set
         {
-            _settings.NoisyCooldownSeconds = value;
-            OnPropertyChanged(nameof(NoisyCooldownSeconds));
-            OnPropertyChanged(nameof(NoisyCooldownSecondsText));
+            _settings.FallWindowSeconds = value;
+            OnPropertyChanged(nameof(FallWindowSeconds));
+            OnPropertyChanged(nameof(FallWindowSecondsText));
         }
     }
-    public string NoisyCooldownSecondsText => $"{_settings.NoisyCooldownSeconds} 秒";
+    public string FallWindowSecondsText => $"{_settings.FallWindowSeconds:0.#} 秒";
 
     public bool SkipFirst3Min
     {
@@ -239,11 +286,73 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
         set { _settings.ShowNoisyCounter = value; OnPropertyChanged(nameof(ShowNoisyCounter)); }
     }
 
-    public string BackgroundColor { get => _settings.BackgroundColor; set => _settings.BackgroundColor = value; }
-    public string FontColor { get => _settings.FontColor; set => _settings.FontColor = value; }
-    public string ClockFontSizeText => $"{_settings.ClockFontSize}px";
+    // ===== 外观颜色（HSV 颜色选择器，Avalonia.Controls.ColorPicker 双向绑定） =====
 
-    public string AccentColor { get => _settings.AccentColor; set => _settings.AccentColor = value; }
+    // ColorPicker 的 Color 属性是 Avalonia.Media.Color（默认 TwoWay），
+    // 这里把它与 PluginSettings 的 hex string 互相转换；Color.ToString() 输出 #AARRGGBB，Color.Parse 可读回。
+
+    public Color BackgroundColorValue
+    {
+        get => Color.Parse(_settings.BackgroundColor);
+        set
+        {
+            _settings.BackgroundColor = value.ToString();
+            OnPropertyChanged(nameof(BackgroundColorValue));
+            OnPropertyChanged(nameof(BackgroundColorBrush));
+            OnPropertyChanged(nameof(BackgroundColorHex));
+        }
+    }
+
+    public Color FontColorValue
+    {
+        get => Color.Parse(_settings.FontColor);
+        set
+        {
+            _settings.FontColor = value.ToString();
+            OnPropertyChanged(nameof(FontColorValue));
+            OnPropertyChanged(nameof(FontColorBrush));
+            OnPropertyChanged(nameof(FontColorHex));
+        }
+    }
+
+    public Color AccentColorValue
+    {
+        get => Color.Parse(_settings.AccentColor);
+        set
+        {
+            _settings.AccentColor = value.ToString();
+            OnPropertyChanged(nameof(AccentColorValue));
+            OnPropertyChanged(nameof(AccentColorBrush));
+            OnPropertyChanged(nameof(AccentColorHex));
+        }
+    }
+
+    public Color ProgressColorValue
+    {
+        get => Color.Parse(_settings.ProgressColor);
+        set
+        {
+            _settings.ProgressColor = value.ToString();
+            OnPropertyChanged(nameof(ProgressColorValue));
+            OnPropertyChanged(nameof(ProgressColorBrush));
+            OnPropertyChanged(nameof(ProgressColorHex));
+        }
+    }
+
+    // 供 ColorPicker 自定义预览（大色块）绑定：色块填充色 + 显示用 #RRGGBB
+    public IBrush BackgroundColorBrush => new SolidColorBrush(BackgroundColorValue);
+    public string BackgroundColorHex => ToHexRgb(BackgroundColorValue);
+    public IBrush FontColorBrush => new SolidColorBrush(FontColorValue);
+    public string FontColorHex => ToHexRgb(FontColorValue);
+    public IBrush AccentColorBrush => new SolidColorBrush(AccentColorValue);
+    public string AccentColorHex => ToHexRgb(AccentColorValue);
+    public IBrush ProgressColorBrush => new SolidColorBrush(ProgressColorValue);
+    public string ProgressColorHex => ToHexRgb(ProgressColorValue);
+
+    /// <summary>Color → #RRGGBB（去掉 alpha，设置界面显示友好）。</summary>
+    private static string ToHexRgb(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+
+    public string ClockFontSizeText => $"{_settings.ClockFontSize}px";
 
     public new event PropertyChangedEventHandler? PropertyChanged;
     protected void OnPropertyChanged(string propertyName)

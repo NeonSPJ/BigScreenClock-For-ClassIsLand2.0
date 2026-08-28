@@ -56,24 +56,31 @@
 
         <!-- 底部 -->
         <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,6,0,0">
-            <!-- 吵闹计数（分段着色：一般=黄，吵闹=红）。鼠标悬停上方时在计数区上方弹出记录规则 -->
+            <!-- 吵闹计数（分段着色：一般=黄，吵闹=红）+ 实时「正在记录」提示。
+                 鼠标悬停上方时在计数区上方弹出记录规则 -->
             <Border Grid.Column="0" VerticalAlignment="Center"
                     x:Name="CounterAreaBorder"
                     PointerEntered="CounterArea_PointerEntered"
                     PointerExited="CounterArea_PointerExited">
-                <ItemsControl ItemsSource="{Binding NoisyDisplaySegments}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal"/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding Text}" Foreground="{Binding Foreground}"
-                                       FontSize="24" FontWeight="Bold"/>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <StackPanel Orientation="Horizontal">
+                    <ItemsControl ItemsSource="{Binding NoisyDisplaySegments}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Text}" Foreground="{Binding Foreground}"
+                                           FontSize="24" FontWeight="Bold"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="{Binding RecordingText}"
+                               Foreground="{Binding RecordingForeground}"
+                               IsVisible="{Binding IsRecordingVisible}"
+                               FontSize="24" FontWeight="Bold" Margin="16,0,0,0"/>
+                </StackPanel>
             </Border>
             <Button Grid.Column="1" Content="✕ 退出全屏时钟"
                     FontSize="15" Foreground="#ffffff44"
@@ -90,10 +97,16 @@
             </Button>
         </Grid>
 
-        <!-- 免责声明（始终显示） -->
-        <StackPanel Grid.Row="3" Margin="0,10,0,0" Spacing="4">
+        <!-- 课程/时段进度条（上课=本课进度，课间=休息进度）+ 免责声明。
+             深色=已进行，浅色=未进行；放学/无时段时进度条隐藏 -->
+        <StackPanel Grid.Row="3" Margin="0,10,0,0" Spacing="6">
+            <ProgressBar Value="{Binding CourseProgress}" Minimum="0" Maximum="100"
+                         Height="6" CornerRadius="3"
+                         Foreground="{Binding ProgressFillBrush}"
+                         Background="{Binding ProgressTrackBrush}"
+                         IsVisible="{Binding ShowCourseProgress}"/>
             <TextBlock Text="{Binding DisclaimerText}"
-                       FontSize="12" Foreground="#55ffffff"
+                       FontSize="10" Foreground="#40ffffff"
                        HorizontalAlignment="Center" TextAlignment="Center"
                        TextWrapping="Wrap"/>
         </StackPanel>

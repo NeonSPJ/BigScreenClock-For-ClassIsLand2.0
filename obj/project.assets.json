@@ -6586,6 +6586,7 @@
   },
   "projectFileDependencyGroups": {
     "net8.0-windows7.0": [
+      "Avalonia.Controls.ColorPicker >= 11.3.17",
       "ClassIsland.PluginSdk >= 2.1.0.1",
       "NAudio >= 2.2.1"
     ]
@@ -6632,6 +6633,11 @@
       "net8.0-windows7.0": {
         "targetAlias": "net8.0-windows",
         "dependencies": {
+          "Avalonia.Controls.ColorPicker": {
+            "include": "Compile, Build, ContentFiles, Analyzers, BuildTransitive",
+            "target": "Package",
+            "version": "[11.3.17, )"
+          },
           "ClassIsland.PluginSdk": {
             "include": "Compile, Build, ContentFiles, Analyzers, BuildTransitive",
             "target": "Package",
