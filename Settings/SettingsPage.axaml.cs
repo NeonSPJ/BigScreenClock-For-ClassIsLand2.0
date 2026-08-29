@@ -286,6 +286,49 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
         set { _settings.ShowNoisyCounter = value; OnPropertyChanged(nameof(ShowNoisyCounter)); }
     }
 
+    // ===== 提醒面板开关 =====
+    public bool ShowReminderPanel
+    {
+        get => _settings.ShowReminderPanel;
+        set { _settings.ShowReminderPanel = value; OnPropertyChanged(nameof(ShowReminderPanel)); }
+    }
+
+    public bool ShowWeatherReminder
+    {
+        get => _settings.ShowWeatherReminder;
+        set { _settings.ShowWeatherReminder = value; OnPropertyChanged(nameof(ShowWeatherReminder)); }
+    }
+
+    public bool ShowAlertsReminder
+    {
+        get => _settings.ShowAlertsReminder;
+        set { _settings.ShowAlertsReminder = value; OnPropertyChanged(nameof(ShowAlertsReminder)); }
+    }
+
+    public bool ShowCountdownReminder
+    {
+        get => _settings.ShowCountdownReminder;
+        set { _settings.ShowCountdownReminder = value; OnPropertyChanged(nameof(ShowCountdownReminder)); }
+    }
+
+    public bool ShowTextReminder
+    {
+        get => _settings.ShowTextReminder;
+        set { _settings.ShowTextReminder = value; OnPropertyChanged(nameof(ShowTextReminder)); }
+    }
+
+    public bool ShowRainReminder
+    {
+        get => _settings.ShowRainReminder;
+        set { _settings.ShowRainReminder = value; OnPropertyChanged(nameof(ShowRainReminder)); }
+    }
+
+    public bool ShowEmojiSubtitles
+    {
+        get => _settings.ShowEmojiSubtitles;
+        set { _settings.ShowEmojiSubtitles = value; OnPropertyChanged(nameof(ShowEmojiSubtitles)); }
+    }
+
     // ===== 外观颜色（HSV 颜色选择器，Avalonia.Controls.ColorPicker 双向绑定） =====
 
     // ColorPicker 的 Color 属性是 Avalonia.Media.Color（默认 TwoWay），
@@ -339,6 +382,30 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
         }
     }
 
+    public Color CourseInfoColorValue
+    {
+        get => Color.Parse(_settings.CourseInfoColor);
+        set
+        {
+            _settings.CourseInfoColor = value.ToString();
+            OnPropertyChanged(nameof(CourseInfoColorValue));
+            OnPropertyChanged(nameof(CourseInfoColorBrush));
+            OnPropertyChanged(nameof(CourseInfoColorHex));
+        }
+    }
+
+    public Color NoiseTitleColorValue
+    {
+        get => Color.Parse(_settings.NoiseTitleColor);
+        set
+        {
+            _settings.NoiseTitleColor = value.ToString();
+            OnPropertyChanged(nameof(NoiseTitleColorValue));
+            OnPropertyChanged(nameof(NoiseTitleColorBrush));
+            OnPropertyChanged(nameof(NoiseTitleColorHex));
+        }
+    }
+
     // 供 ColorPicker 自定义预览（大色块）绑定：色块填充色 + 显示用 #RRGGBB
     public IBrush BackgroundColorBrush => new SolidColorBrush(BackgroundColorValue);
     public string BackgroundColorHex => ToHexRgb(BackgroundColorValue);
@@ -348,6 +415,10 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
     public string AccentColorHex => ToHexRgb(AccentColorValue);
     public IBrush ProgressColorBrush => new SolidColorBrush(ProgressColorValue);
     public string ProgressColorHex => ToHexRgb(ProgressColorValue);
+    public IBrush CourseInfoColorBrush => new SolidColorBrush(CourseInfoColorValue);
+    public string CourseInfoColorHex => ToHexRgb(CourseInfoColorValue);
+    public IBrush NoiseTitleColorBrush => new SolidColorBrush(NoiseTitleColorValue);
+    public string NoiseTitleColorHex => ToHexRgb(NoiseTitleColorValue);
 
     /// <summary>Color → #RRGGBB（去掉 alpha，设置界面显示友好）。</summary>
     private static string ToHexRgb(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";

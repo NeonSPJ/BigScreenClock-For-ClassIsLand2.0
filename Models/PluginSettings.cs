@@ -15,7 +15,9 @@ public class PluginSettings : INotifyPropertyChanged
     private string _backgroundColor = "#000000";
     private string _fontColor = "#ffffff";
     private string _accentColor = "#4CAF50";
-    private string _progressColor = "#4CAF50";
+    private string _progressColor = "#4FC3F7";
+    private string _courseInfoColor = "#88ccff";
+    private string _noiseTitleColor = "#bbffffff";
     private bool _showDecibelMeter = true;
     private bool _showCourseInfo = true;
     private bool _showNoisyCounter = true;
@@ -26,6 +28,13 @@ public class PluginSettings : INotifyPropertyChanged
     private bool _enableNoiseDebugLog;
     private int _clockFontSize = 180;
     private string _windowTitle = "大屏时钟";
+    private bool _showReminderPanel = true;
+    private bool _showWeatherReminder = true;
+    private bool _showAlertsReminder = true;
+    private bool _showCountdownReminder = true;
+    private bool _showTextReminder = true;
+    private bool _showRainReminder = true;
+    private bool _showEmojiSubtitles = true;
 
     public PluginSettings()
     {
@@ -111,6 +120,24 @@ public class PluginSettings : INotifyPropertyChanged
     {
         get => _progressColor;
         set { _progressColor = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 当前课程信息文字颜色 (HEX)。
+    /// </summary>
+    public string CourseInfoColor
+    {
+        get => _courseInfoColor;
+        set { _courseInfoColor = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 教室音量条标题文字颜色 (HEX)。
+    /// </summary>
+    public string NoiseTitleColor
+    {
+        get => _noiseTitleColor;
+        set { _noiseTitleColor = value; OnPropertyChanged(); }
     }
 
     /// <summary>
@@ -203,6 +230,55 @@ public class PluginSettings : INotifyPropertyChanged
     {
         get => _windowTitle;
         set { _windowTitle = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>是否显示左上角「提醒」面板（总开关；面板同时要求至少一个子项有内容）。</summary>
+    public bool ShowReminderPanel
+    {
+        get => _showReminderPanel;
+        set { _showReminderPanel = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>提醒面板中是否显示天气（跟随 CI 的天气缓存，不用 CI 的实时预报判断）。</summary>
+    public bool ShowWeatherReminder
+    {
+        get => _showWeatherReminder;
+        set { _showWeatherReminder = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>提醒面板中是否显示天气预警（区级统一发布，跟随 CI 的预警缓存）。</summary>
+    public bool ShowAlertsReminder
+    {
+        get => _showAlertsReminder;
+        set { _showAlertsReminder = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>提醒面板中是否显示倒计时（跟随 CI 主界面组件里的倒计时组件）。</summary>
+    public bool ShowCountdownReminder
+    {
+        get => _showCountdownReminder;
+        set { _showCountdownReminder = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>提醒面板中是否显示文本框（跟随 CI 主界面组件里的文本组件）。</summary>
+    public bool ShowTextReminder
+    {
+        get => _showTextReminder;
+        set { _showTextReminder = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>提醒面板中是否显示「多久下雨」降雨提醒（跟随 CI 的分钟级/逐小时降水数据）。</summary>
+    public bool ShowRainReminder
+    {
+        get => _showRainReminder;
+        set { _showRainReminder = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>是否显示颜文字副标题（气温旁「记得防晒 (っ'ω')ﾉ」、日期旁「别熬啦 (｡-_-｡)」等趣味提醒；关闭则只留正文字幕）。</summary>
+    public bool ShowEmojiSubtitles
+    {
+        get => _showEmojiSubtitles;
+        set { _showEmojiSubtitles = value; OnPropertyChanged(); }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

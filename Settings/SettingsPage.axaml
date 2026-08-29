@@ -15,6 +15,27 @@
                         <CheckBox IsChecked="{Binding ShowDecibelMeter}" FontSize="14" Foreground="#ffffff">🎤 教室音量</CheckBox>
                         <CheckBox IsChecked="{Binding ShowCourseInfo}" FontSize="14" Foreground="#ffffff">📋 课程信息</CheckBox>
                         <CheckBox IsChecked="{Binding ShowNoisyCounter}" FontSize="14" Foreground="#ffffff">📊 吵闹计数</CheckBox>
+                        <CheckBox IsChecked="{Binding ShowReminderPanel}" FontSize="14" Foreground="#ffffff">🔔 提醒显示</CheckBox>
+                        <!-- 提醒子项：勾选「提醒显示」后出现 -->
+                        <StackPanel Spacing="6" Margin="20,2,0,0"
+                                    IsVisible="{Binding ShowReminderPanel}">
+                            <TextBlock Text="提醒面板要显示哪几类？倒计时/文本框需先在 CI 主界面加了对应组件才有内容。" FontSize="11" Foreground="#88ffffff" TextWrapping="Wrap"/>
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="16" RowSpacing="2"
+                                  RowDefinitions="Auto,Auto,Auto">
+                                <CheckBox Grid.Row="0" Grid.Column="0" IsChecked="{Binding ShowWeatherReminder}"
+                                          FontSize="14" Foreground="#ddffffff">☀ 天气</CheckBox>
+                                <CheckBox Grid.Row="0" Grid.Column="1" IsChecked="{Binding ShowAlertsReminder}"
+                                          FontSize="14" Foreground="#ddffffff">⚠ 预警</CheckBox>
+                                <CheckBox Grid.Row="1" Grid.Column="0" IsChecked="{Binding ShowCountdownReminder}"
+                                          FontSize="14" Foreground="#ddffffff">⏳ 倒计时</CheckBox>
+                                <CheckBox Grid.Row="1" Grid.Column="1" IsChecked="{Binding ShowTextReminder}"
+                                          FontSize="14" Foreground="#ddffffff">📝 文本框</CheckBox>
+                                <CheckBox Grid.Row="2" Grid.Column="0" IsChecked="{Binding ShowRainReminder}"
+                                          FontSize="14" Foreground="#ddffffff">☔ 降雨提醒</CheckBox>
+                                <CheckBox Grid.Row="2" Grid.Column="1" IsChecked="{Binding ShowEmojiSubtitles}"
+                                          FontSize="14" Foreground="#ddffffff">(ノω≦) 颜文字</CheckBox>
+                            </Grid>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
@@ -169,6 +190,32 @@
                                 </cp:ColorPicker.Content>
                             </cp:ColorPicker>
                         </Grid>
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="课程信息颜色" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
+                            <TextBlock Grid.Column="1" Text="{Binding CourseInfoColorHex}" FontSize="12" Foreground="#99ffffff"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                            <cp:ColorPicker Grid.Column="2" Color="{Binding CourseInfoColorValue}"
+                                            IsAccentColorsVisible="False" Width="90" Height="28"
+                                            HorizontalAlignment="Right">
+                                <cp:ColorPicker.Content>
+                                    <Border Background="{Binding CourseInfoColorBrush}" CornerRadius="3"
+                                            BorderBrush="#44ffffff" BorderThickness="1"/>
+                                </cp:ColorPicker.Content>
+                            </cp:ColorPicker>
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="音量条文字颜色" VerticalAlignment="Center" Foreground="#aaffffff" FontSize="13"/>
+                            <TextBlock Grid.Column="1" Text="{Binding NoiseTitleColorHex}" FontSize="12" Foreground="#99ffffff"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                            <cp:ColorPicker Grid.Column="2" Color="{Binding NoiseTitleColorValue}"
+                                            IsAccentColorsVisible="False" Width="90" Height="28"
+                                            HorizontalAlignment="Right">
+                                <cp:ColorPicker.Content>
+                                    <Border Background="{Binding NoiseTitleColorBrush}" CornerRadius="3"
+                                            BorderBrush="#44ffffff" BorderThickness="1"/>
+                                </cp:ColorPicker.Content>
+                            </cp:ColorPicker>
+                        </Grid>
                     </StackPanel>
                 </Border>
 
@@ -201,21 +248,69 @@
                 <TextBlock Text="{Binding PreviewCourseText}" IsVisible="{Binding ShowCourseInfo}"
                            FontSize="11" FontWeight="Bold" Foreground="#88ccff"
                            HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
-                <Border Background="#1a1a2e" CornerRadius="6" Padding="6,4"
+
+                <!-- 提醒区（跟随「提醒显示」总开关；子项各自开关控制对应内容） -->
+                <StackPanel IsVisible="{Binding ShowReminderPanel}" Spacing="2" Margin="0,2,0,2">
+                    <!-- 顶部提醒行：天气 / 倒计时 / 日期 -->
+                    <WrapPanel HorizontalAlignment="Center">
+                        <TextBlock Text="☀ 30° 多云" FontSize="9" Foreground="#ccffffff"
+                                   Margin="0,0,6,0" IsVisible="{Binding ShowWeatherReminder}"/>
+                        <TextBlock Text="⏳ 高考 还有 30 天" FontSize="9" Foreground="#ffffdd"
+                                   Margin="0,0,6,0" IsVisible="{Binding ShowCountdownReminder}"/>
+                        <TextBlock Text="8月29日 周五" FontSize="9" Foreground="#88ffffff"/>
+                    </WrapPanel>
+                    <!-- 降雨提醒 -->
+                    <TextBlock Text="☔ 20小时内当前地区有降雨 记得带伞哦 (ノω≦)"
+                               FontSize="9" Foreground="#aaffffff" HorizontalAlignment="Center"
+                               TextWrapping="Wrap" TextAlignment="Center"
+                               IsVisible="{Binding ShowRainReminder}"/>
+                    <!-- 预警 -->
+                    <TextBlock Text="⚠ 地质灾害气象风险预警" FontSize="9" Foreground="#ffdd44"
+                               HorizontalAlignment="Center" IsVisible="{Binding ShowAlertsReminder}"/>
+                    <!-- 文本框 -->
+                    <TextBlock Text="📝 自习课请保持安静" FontSize="9" Foreground="#ddffffff"
+                               HorizontalAlignment="Center" IsVisible="{Binding ShowTextReminder}"/>
+                </StackPanel>
+
+                <!-- 音量条（本版：标题+档位、分段刻度轨道、五档） -->
+                <Border Background="#1a1a2e" CornerRadius="6" Padding="8,6"
                         IsVisible="{Binding ShowDecibelMeter}"
                         HorizontalAlignment="Center">
-                    <StackPanel Spacing="2" HorizontalAlignment="Center">
-                        <TextBlock Text="📢 教室音量" FontSize="9" Foreground="#aaffffff" HorizontalAlignment="Center"/>
-                        <Border Background="#33ffffff" CornerRadius="2" Height="3" Width="160"/>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="2">
-                            <TextBlock Text="🙂" FontSize="11"/>
-                            <TextBlock Text="安静" FontSize="10" Foreground="#ffffff"/>
-                        </StackPanel>
+                    <StackPanel Spacing="3" Width="210">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="📢 教室音量" FontSize="9" Foreground="#bbffffff" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="🤫 良好" FontSize="9"
+                                       Foreground="#ffdd44" FontWeight="Bold" HorizontalAlignment="Right"/>
+                        </Grid>
+                        <!-- 轨道 + 分段刻度块 -->
+                        <Grid ColumnDefinitions="1*,1,1*,1,1*,1,1*,1,1*" Height="10">
+                            <Border Grid.ColumnSpan="9" Background="#33ffffff" CornerRadius="2"
+                                    Height="3" VerticalAlignment="Center"/>
+                            <Rectangle Grid.Column="1" Width="1.5" Height="7" Fill="#66ffffff" VerticalAlignment="Center"/>
+                            <Rectangle Grid.Column="3" Width="1.5" Height="7" Fill="#66ffffff" VerticalAlignment="Center"/>
+                            <Rectangle Grid.Column="5" Width="1.5" Height="7" Fill="#66ffffff" VerticalAlignment="Center"/>
+                            <Rectangle Grid.Column="7" Width="1.5" Height="7" Fill="#66ffffff" VerticalAlignment="Center"/>
+                        </Grid>
+                        <!-- 五档文字 -->
+                        <Grid ColumnDefinitions="*,*,*,*,*">
+                            <TextBlock Grid.Column="0" Text="安静" FontSize="8" Foreground="#88ffffff" HorizontalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="良好" FontSize="8" Foreground="#88ffffff" HorizontalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="一般" FontSize="8" Foreground="#88ffffff" HorizontalAlignment="Center"/>
+                            <TextBlock Grid.Column="3" Text="吵闹" FontSize="8" Foreground="#88ffffff" HorizontalAlignment="Center"/>
+                            <TextBlock Grid.Column="4" Text="嘈杂" FontSize="8" Foreground="#88ffffff" HorizontalAlignment="Center"/>
+                        </Grid>
                     </StackPanel>
                 </Border>
+
                 <TextBlock Text="晚自习  吵闹 2 次" IsVisible="{Binding ShowNoisyCounter}"
                            FontSize="10" Foreground="#ffff44" HorizontalAlignment="Center"
                            FontWeight="Bold"/>
+
+                <!-- 课程进度条（底部双色条：亮色已完成 + 深色剩余） -->
+                <Border Background="#1a1a2e" CornerRadius="3" Height="5" Width="220"
+                        HorizontalAlignment="Center" Margin="0,3,0,0">
+                    <Border Width="120" Background="#4FC3F7" CornerRadius="3" HorizontalAlignment="Left"/>
+                </Border>
             </StackPanel>
             </Border>
             <Button Content="▶ 进入全屏时钟"

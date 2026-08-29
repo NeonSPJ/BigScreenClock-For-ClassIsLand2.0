@@ -1,13 +1,18 @@
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Timers;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
+using Avalonia.Media.TextFormatting;
 using Avalonia.Threading;
 using ClassIsland.Core.Abstractions.Services;
+using ClassIsland.Core.Models.Components;
 using ClassIsland.Shared.Enums;
 using EveningSelfStudyClock.Models;
 using EveningSelfStudyClock.NoiseDetection;
@@ -36,6 +41,12 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
     private static readonly IBrush CountNormalBrush = new SolidColorBrush(Color.Parse("#ffff44"));
     private static readonly IBrush CountNoisyBrush = new SolidColorBrush(Color.Parse("#ff5555"));
 
+    // 音量条档位：档位名/表情 + 当前档位文字数据项（XAML 绑定）。
+    // 五档高亮、右侧状态、填充色全部以 NoiseLevelProgress 反推出的 CurrentSlot 为唯一源，避免不同步。
+    private static readonly string[] SlotNames = { "安静", "良好", "一般", "吵闹", "嘈杂" };
+    private static readonly string[] SlotEmojis = { "🙂", "🤫", "💬", "🗣️", "📢" };
+    private readonly ObservableCollection<NoiseLevelSlotItem> _noiseLevelSlots = new();
+
     private string _currentTime = "00:00:00";
     private string _currentDate = "";
     private string _currentCourseName = "";
@@ -49,6 +60,11 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
     private System.Timers.Timer? _antiScreensaverTimer;
     private string _noisyDisplaySignature = "";
     private bool _showCountRules;
+
+    // ===== 提醒面板数据（跟随 CI 组件配置 + CI 天气缓存） =====
+    private readonly ReminderData _reminderData = new();
+    private int _reminderTick;
+    private DateTime _lastWeatherRead = DateTime.MinValue;
 
     public FullScreenClockViewModel(
         PluginSettings settings,
@@ -69,6 +85,14 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         _decibelService.PropertyChanged += OnDecibelPropertyChanged;
         _decibelService.NoiseEventRaised += OnNoiseEventRaised;
         _settings.PropertyChanged += OnSettingsPropertyChanged;
+
+        for (var i = 0; i < SlotNames.Length; i++)
+        {
+            var c = LevelSlotCalculator.SlotColors[i];
+            var color = Color.FromArgb((byte)(c >> 24), (byte)(c >> 16), (byte)(c >> 8), (byte)c);
+            _noiseLevelSlots.Add(new NoiseLevelSlotItem(SlotNames[i], new SolidColorBrush(color)));
+        }
+        UpdateNoiseLevelSlots();
     }
 
     /// <summary>
@@ -93,6 +117,24 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         {
             OnPropertyChanged(nameof(CountRulesText));
         }
+        else if (args.PropertyName is nameof(PluginSettings.ShowReminderPanel)
+            or nameof(PluginSettings.ShowWeatherReminder)
+            or nameof(PluginSettings.ShowAlertsReminder)
+            or nameof(PluginSettings.ShowCountdownReminder)
+            or nameof(PluginSettings.ShowTextReminder)
+            or nameof(PluginSettings.ShowRainReminder))
+        {
+            NotifyReminderChanged();
+        }
+        else if (args.PropertyName is nameof(PluginSettings.ShowEmojiSubtitles))
+        {
+            // 颜文字开关：全部副标题即时重算（清空/恢复）
+            OnPropertyChanged(nameof(RainSubtitle));
+            OnPropertyChanged(nameof(HasRainSubtitle));
+            UpdateWeatherSubtitle();
+            UpdateDateSubtitle();
+            UpdateCountdownSubtitle();
+        }
     }
 
     /// <summary>
@@ -105,6 +147,7 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
             or nameof(DecibelMeterService.NoiseLevelProgress))
         {
             OnPropertyChanged(args.PropertyName!);
+            UpdateNoiseLevelSlots();   // 档位/进度变化 → 刷新档位高亮与轨道填充色
         }
         else if (args.PropertyName == nameof(DecibelMeterService.CurrentSegmentLevel))
         {
@@ -158,19 +201,14 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
     public string FontColor => _settings.FontColor;
     public string AccentColor => _settings.AccentColor;
     public string ProgressColor => _settings.ProgressColor;
+    public string CourseInfoColor => _settings.CourseInfoColor;
+    public string NoiseTitleColor => _settings.NoiseTitleColor;
 
     /// <summary>进度条「已进行」部分颜色（深色，不透明）。</summary>
     public IBrush ProgressFillBrush => new SolidColorBrush(Color.Parse(_settings.ProgressColor));
 
-    /// <summary>进度条「未进行」部分颜色（浅色，由 ProgressColor 半透明派生）。</summary>
-    public IBrush ProgressTrackBrush
-    {
-        get
-        {
-            var c = Color.Parse(_settings.ProgressColor);
-            return new SolidColorBrush(new Color((byte)(c.A / 4), c.R, c.G, c.B));
-        }
-    }
+    /// <summary>进度带「未进行」部分颜色（深蓝低饱和，固定，与音量条轨道同色系）。</summary>
+    public IBrush ProgressTrackBrush => new SolidColorBrush(Color.Parse("#B31C3047"));
 
     /// <summary>
     /// 触发所有外观属性变更通知，让窗口绑定重新求值。
@@ -184,13 +222,50 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ProgressColor));
         OnPropertyChanged(nameof(ProgressFillBrush));
         OnPropertyChanged(nameof(ProgressTrackBrush));
+        OnPropertyChanged(nameof(CourseInfoColor));
+        OnPropertyChanged(nameof(NoiseTitleColor));
         OnPropertyChanged(nameof(ClockFontSize));
         OnPropertyChanged(nameof(WindowTitle));
     }
-    public string NoiseLevelText => _decibelService.NoiseLevelText;
-    public string NoiseLevelEmoji => _decibelService.NoiseLevelEmoji;
     public double NoiseLevelProgress => _decibelService.NoiseLevelProgress;
     public int DisplayLevel => _decibelService.DisplayLevel;
+
+    /// <summary>统一档位索引（0-4）：轨道位置、五档高亮、右侧状态共用 NoiseLevelProgress 反推，三处同源。</summary>
+    private int CurrentSlot => LevelSlotCalculator.SlotFromProgress(_decibelService.NoiseLevelProgress);
+
+    /// <summary>右侧状态文字（按统一档位查表，不再转发 Service 的迟滞分级，避免与轨道不同步）。</summary>
+    public string NoiseLevelText => SlotNames[CurrentSlot];
+
+    /// <summary>右侧状态表情（同上，按统一档位查表）。</summary>
+    public string NoiseLevelEmoji => SlotEmojis[CurrentSlot];
+
+    /// <summary>音量条五档文字集合（安静/良好/一般/吵闹/嘈杂）。</summary>
+    public ObservableCollection<NoiseLevelSlotItem> NoiseLevelSlots => _noiseLevelSlots;
+
+    /// <summary>音量条轨道填充色：随当前档位可变（绿→黄→红）。</summary>
+    public IBrush NoiseLevelFillBrush => new SolidColorBrush(CurrentSlotColor());
+
+    /// <summary>音量条轨道底色（深蓝低饱和，与课程进度带 track 同色）。</summary>
+    public IBrush NoiseLevelTrackBrush => new SolidColorBrush(Color.Parse("#B31C3047"));
+
+    /// <summary>当前档位对应的 ARGB 颜色。</summary>
+    private Color CurrentSlotColor()
+    {
+        var slot = CurrentSlot;
+        var c = LevelSlotCalculator.SlotColors[Math.Clamp(slot, 0, LevelSlotCalculator.SlotColors.Length - 1)];
+        return Color.FromArgb((byte)(c >> 24), (byte)(c >> 16), (byte)(c >> 8), (byte)c);
+    }
+
+    /// <summary>档位变化时：刷新当前档位文字高亮 + 轨道填充色 + 右侧状态文字/表情（全部同一档位源）。</summary>
+    private void UpdateNoiseLevelSlots()
+    {
+        var slot = CurrentSlot;
+        for (var i = 0; i < _noiseLevelSlots.Count; i++)
+            _noiseLevelSlots[i].IsCurrent = i == slot;
+        OnPropertyChanged(nameof(NoiseLevelText));
+        OnPropertyChanged(nameof(NoiseLevelEmoji));
+        OnPropertyChanged(nameof(NoiseLevelFillBrush));
+    }
 
     /// <summary>
     /// 计数区域的分段显示：课程名/一般（黄）/吵闹（红）/保护提示。
@@ -297,6 +372,389 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
 
     public string WindowTitle => _settings.WindowTitle;
 
+    // ===== 提醒面板（左上角）：天气 / 降雨 / 预警 / 倒计时 / 文本框，跟随 CI 配置 =====
+
+    public string WeatherIcon => _reminderData.WeatherIcon ?? "🌡️";
+
+    private string _rainReminderTitle = "";
+
+    /// <summary>未来降雨提醒主标题（如「20小时内当前地区有降雨」）；无雨为空串。副标题「记得带伞哦」界面固定。</summary>
+    public string RainReminderTitle
+    {
+        get => _rainReminderTitle;
+        set
+        {
+            if (_rainReminderTitle == value) return;
+            _rainReminderTitle = value;
+            OnPropertyChanged(nameof(RainReminderTitle));
+            OnPropertyChanged(nameof(ShowRainReminder));
+        }
+    }
+
+    /// <summary>降雨提醒可见性：跟随独立「多久下雨」开关，且有降雨数据。</summary>
+    public bool ShowRainReminder => _settings.ShowRainReminder && !string.IsNullOrEmpty(_rainReminderTitle);
+    public string WeatherText => _reminderData.WeatherText ?? "";
+    public string ReminderText => _reminderData.TextContent ?? "";
+
+    /// <summary>倒计时整行文本（如「高考   还有 30 天」）。</summary>
+    public string CountdownText
+    {
+        get
+        {
+            var title = _reminderData.CountdownTitle;
+            var remaining = _reminderData.CountdownRemaining;
+            if (string.IsNullOrEmpty(title)) return remaining ?? "";
+            return string.IsNullOrEmpty(remaining) ? title : $"{title}   {remaining}";
+        }
+    }
+
+    /// <summary>预警列表（按等级着色）。</summary>
+    public ObservableCollection<AlertDisplayItem> AlertItems { get; } = new();
+
+    /// <summary>当前展开预警的详情全文（顶部弹幕带显示；点「>」展开时设置，收起或刷新时清空）。</summary>
+    private string? _expandedAlertDetail;
+    public string? ExpandedAlertDetail
+    {
+        get => _expandedAlertDetail;
+        set
+        {
+            if (_expandedAlertDetail == value) return;
+            _expandedAlertDetail = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasExpandedAlert));
+        }
+    }
+    public bool HasExpandedAlert => !string.IsNullOrEmpty(_expandedAlertDetail);
+
+    // 组合可见性：子开关 && 有数据；面板总开关 && 至少一个子项显示
+    // （天气/倒计时已在顶部行独立显示，不参与提醒面板）
+    public bool ShowWeatherRow => _settings.ShowWeatherReminder && _reminderData.HasWeather;
+    public bool ShowAlertsRow => _settings.ShowAlertsReminder && _reminderData.HasAlerts;
+    public bool ShowCountdownRow => _settings.ShowCountdownReminder && _reminderData.HasCountdown;
+    public bool ShowTextRow => _settings.ShowTextReminder && _reminderData.HasText;
+    public bool ShowReminderPanel => _settings.ShowReminderPanel
+        && (ShowAlertsRow || ShowTextRow || ShowRainReminder);
+
+    /// <summary>
+    /// 倒计时是否换行到天气下方：按实际渲染宽度判断。
+    /// 顶部第一行 = 天气 + 倒计时 + 预警详情弹幕，三者总宽超过屏幕 2/3（ReminderPanelMaxWidth）时，
+    /// 倒计时换行到天气下方、弹幕拉长到整行。
+    /// </summary>
+    public bool CountdownWrapped
+    {
+        get => _countdownWrapped;
+        private set
+        {
+            if (_countdownWrapped == value) return;
+            _countdownWrapped = value;
+            OnPropertyChanged();
+        }
+    }
+    private bool _countdownWrapped;
+
+    /// <summary>提醒面板最大宽度：由窗口按「屏幕宽 × 2/3」设置，只约束提醒面板（降雨/文本/预警）。</summary>
+    public double ReminderPanelMaxWidth
+    {
+        get => _reminderPanelMaxWidth;
+        set
+        {
+            if (Math.Abs(_reminderPanelMaxWidth - value) < 0.5) return;
+            _reminderPanelMaxWidth = value;
+            OnPropertyChanged();
+        }
+    }
+    private double _reminderPanelMaxWidth = 520;
+
+    /// <summary>倒计时换行阈值：天气+倒计时实际宽度超过「屏幕宽 × 1/3」时，倒计时换行到天气下方。</summary>
+    public double CountdownWrapThreshold
+    {
+        get => _countdownWrapThreshold;
+        set
+        {
+            if (Math.Abs(_countdownWrapThreshold - value) < 0.5) return;
+            _countdownWrapThreshold = value;
+            OnPropertyChanged();
+            UpdateCountdownWrap();   // 阈值变化会改变是否换行
+        }
+    }
+    private double _countdownWrapThreshold = 640;
+
+    /// <summary>按实际渲染宽度重算倒计时是否换行（天气+倒计时宽度是否超过屏幕 1/3）。</summary>
+    private void UpdateCountdownWrap()
+    {
+        var weatherRow = TextWidth(WeatherIcon, 20) + 6 + TextWidth(WeatherText, 19);
+        var countdownRow = TextWidth("⏳", 20) + 6 + TextWidth(CountdownText, 19);
+        CountdownWrapped = weatherRow + 28 + countdownRow > CountdownWrapThreshold;
+    }
+
+    // ===== 颜文字副标题（趣味提醒）：气温/天气旁、日期旁、倒计时旁、降雨旁的小字号副标题 =====
+    // 由「颜文字提醒」开关统一控制；关闭时全部清空、保留正文字幕。固定文本不轮换。
+
+    /// <summary>距最近降雨的小时数（0=正在下；null=未来无雨或未读到）。带伞副标题只在 6 小时内显示。</summary>
+    private int? _rainHours;
+
+    /// <summary>降雨提醒副标题：距离下雨 ≤6 小时才显示「记得带伞哦」（超过 6 小时只留主标题）；
+    /// 开关开启带颜文字，否则纯文字。</summary>
+    public string? RainSubtitle
+    {
+        get
+        {
+            if (_rainHours is not (>= 0 and <= 6)) return null;
+            return _settings.ShowEmojiSubtitles ? "记得带伞哦 (ノω≦)" : "记得带伞哦";
+        }
+    }
+    public bool HasRainSubtitle => RainSubtitle is not null;
+
+    private string? _weatherCode;
+    private double? _weatherTempC;
+
+    /// <summary>雪/雨夹雪天气码（下雪优先显示保暖副标题，压过温度提示）。</summary>
+    private static readonly HashSet<string> SnowCodes = new() { "06", "13", "14", "15", "16", "17", "26", "27", "28" };
+    /// <summary>雾/霾天气码。</summary>
+    private static readonly HashSet<string> FogCodes = new() { "18", "22", "32" };
+
+    private string? _weatherSubtitle;
+    public string? WeatherSubtitle
+    {
+        get => _weatherSubtitle;
+        private set
+        {
+            if (_weatherSubtitle == value) return;
+            _weatherSubtitle = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasWeatherSubtitle));
+        }
+    }
+    public bool HasWeatherSubtitle => !string.IsNullOrEmpty(_weatherSubtitle);
+
+    private string? _dateSubtitle;
+    public string? DateSubtitle
+    {
+        get => _dateSubtitle;
+        private set
+        {
+            if (_dateSubtitle == value) return;
+            _dateSubtitle = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasDateSubtitle));
+        }
+    }
+    public bool HasDateSubtitle => !string.IsNullOrEmpty(_dateSubtitle);
+
+    private string? _countdownSubtitle;
+    public string? CountdownSubtitle
+    {
+        get => _countdownSubtitle;
+        private set
+        {
+            if (_countdownSubtitle == value) return;
+            _countdownSubtitle = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasCountdownSubtitle));
+        }
+    }
+    public bool HasCountdownSubtitle => !string.IsNullOrEmpty(_countdownSubtitle);
+
+    /// <summary>气温旁副标题：雪 > 雾霾 > 高温 > 低温，取最先命中的一项。</summary>
+    private void UpdateWeatherSubtitle()
+    {
+        string? s = null;
+        if (_settings.ShowEmojiSubtitles)
+        {
+            if (_weatherCode is { } code)
+            {
+                if (SnowCodes.Contains(code)) s = "注意保暖 (❁´ω`❁)";
+                else if (FogCodes.Contains(code)) s = "出门戴口罩 (´-ω-`)";
+            }
+            if (s is null && _weatherTempC is { } t)
+            {
+                if (t >= 36) s = "天太热，多喝水 (￣△￣;)";
+                else if (t >= 33) s = "记得防晒 (っ'ω')ﾉ";
+                else if (t <= 0) s = "冻手冻脚，注意保暖 (｡-_-｡)";
+                else if (t <= 8) s = "天冷多穿点 (｡>ㅅ<｡)";
+            }
+        }
+        WeatherSubtitle = s;
+    }
+
+    /// <summary>日期下方副标题：深夜 > 周五 > 月初（每秒刷新，到点自动切换）。</summary>
+    private void UpdateDateSubtitle()
+    {
+        string? s = null;
+        if (_settings.ShowEmojiSubtitles)
+        {
+            var now = DateTime.Now;
+            if (now.DayOfWeek == DayOfWeek.Thursday) s = "撑住！明天就能回家了！ (๑•̀ㅂ•́)و";
+            else if (now.Day == 1) s = "新的一个月，加油 (ง •̀_•́)ง";
+        }
+        DateSubtitle = s;
+    }
+
+    /// <summary>倒计时旁副标题：剩余 ≤30 天进入冲刺提示。</summary>
+    private void UpdateCountdownSubtitle()
+    {
+        string? s = null;
+        if (_settings.ShowEmojiSubtitles && _reminderData.CountdownRemaining is { } remaining)
+        {
+            var digits = new string(remaining.Where(char.IsDigit).ToArray());
+            if (int.TryParse(digits, out var days) && days is > 0 and <= 30)
+                s = "冲刺啦，冲鸭 (๑•̀ㅂ•́)و✧";
+        }
+        CountdownSubtitle = s;
+    }
+
+    /// <summary>从 CI 温度字符串（可能带 ℃/负号）解析数值，失败返回 null。</summary>
+    private static double? ParseTemp(string? t)
+    {
+        if (string.IsNullOrEmpty(t)) return null;
+        var s = new string(t.Where(c => char.IsDigit(c) || c == '-').ToArray());
+        return double.TryParse(s, out var v) ? v : null;
+    }
+
+    /// <summary>用 TextLayout 独立测量文本实际渲染宽度（不依赖可视树布局，中英文混合也准确）。</summary>
+    private static double TextWidth(string? s, double fontSize)
+        => string.IsNullOrEmpty(s)
+            ? 0
+            : new TextLayout(s, new Typeface("Microsoft YaHei"), fontSize,
+                null, TextAlignment.Left, TextWrapping.NoWrap).Width;
+
+    /// <summary>进入全屏时立即同步一次提醒数据（不等定时器）。</summary>
+    private void RefreshRemindersNow()
+    {
+        RefreshComponents();
+        RefreshWeather();
+    }
+
+    /// <summary>从 CI 组件配置读取倒计时/文本框（每 3 秒）；用户增删组件自动跟随。</summary>
+    private void RefreshComponents()
+    {
+        try
+        {
+            var compService = _serviceProvider.GetService<IComponentsService>();
+            var profile = compService?.CurrentComponents;
+            if (profile is null) return;
+
+            string? title = null, remaining = null;
+            var texts = new List<string>();
+            foreach (var line in profile.Lines)
+                foreach (var child in line.Children)
+                    CollectComponents(child, ref title, ref remaining, texts);
+
+            _reminderData.CountdownTitle = title;
+            _reminderData.CountdownRemaining = remaining;
+            _reminderData.TextContent = texts.Count > 0 ? string.Join("\n", texts) : null;
+            NotifyReminderChanged();
+        }
+        catch { /* CI 组件服务暂不可用时保持上次数据 */ }
+    }
+
+    /// <summary>递归收集组件设置里的倒计时/文本框（容器组件也遍历 Children）。</summary>
+    /// <remarks>
+    /// 不过滤 <see cref="ComponentSettings.IsActive"/>：实测 CI 布局文件里该字段对已显示组件也常为 false，
+    /// 并非「是否显示」的可靠标志；用户要求「加了组件就显示」，故只按是否提取到内容判定。
+    /// </remarks>
+    private void CollectComponents(
+        ComponentSettings c,
+        ref string? title, ref string? remaining, List<string> texts)
+    {
+        if (c.Settings is not null)
+        {
+            var (t, r, txt) = CiComponentsReader.Extract(c.Settings, NowVirtual);
+            if (!string.IsNullOrEmpty(t)) title ??= t;
+            if (!string.IsNullOrEmpty(r)) remaining ??= r;
+            if (!string.IsNullOrEmpty(txt)) texts.Add(txt!);
+        }
+        if (c.Children is not null)
+            foreach (var child in c.Children)
+                CollectComponents(child, ref title, ref remaining, texts);
+    }
+
+    /// <summary>从 CI Settings.json 缓存读取天气 + 预警（每 60 秒）。</summary>
+    private void RefreshWeather()
+    {
+        try
+        {
+            var settingsPath = Path.Combine(CiDataDir, "Settings.json");
+            if (!File.Exists(settingsPath)) return;
+            var (code, temp, alerts) = CiWeatherReader.ReadLastWeather(settingsPath);
+
+            AlertItems.Clear();
+            ExpandedAlertDetail = null;   // 数据刷新后收起展开态（弹幕尺寸按旧文本算会错位）
+            foreach (var a in alerts)
+                AlertItems.Add(new AlertDisplayItem
+                {
+                    DisplayText = $"⚠ {a.Title}",
+                    Foreground = AlertBrush(a.Level),
+                    Detail = a.Detail,
+                });
+
+            _reminderData.Alerts.Clear();
+            _reminderData.Alerts.AddRange(alerts);
+
+            if (string.IsNullOrEmpty(code))
+            {
+                _reminderData.WeatherIcon = null;
+                _reminderData.WeatherText = null;
+            }
+            else
+            {
+                var desc = CiWeatherReader.GetWeatherDescription(code) ?? code;
+                _reminderData.WeatherText = string.IsNullOrEmpty(temp) ? desc : $"{temp}° {desc}";
+
+                // 天气图标：用 emoji（跟随天气码）。CI 的图标模板按小米天气码查图标，
+                // 映射表在 CI 运行时私有初始化，插件拿不到可靠码表，接出来只会显示占位图标。
+                _reminderData.WeatherIcon = CiWeatherReader.WeatherEmoji.TryGetValue(code, out var icon)
+                    ? icon : "🌡️";
+            }
+
+            _weatherCode = string.IsNullOrEmpty(code) ? null : code;
+            _weatherTempC = string.IsNullOrEmpty(temp) ? null : ParseTemp(temp);
+            _rainHours = CiWeatherReader.ReadRainHours(settingsPath);
+            RainReminderTitle = CiWeatherReader.ReadRainReminder(settingsPath) ?? "";
+            NotifyReminderChanged();
+        }
+        catch { }
+    }
+
+    /// <summary>预警等级 → 显示颜色（蓝/黄/橙/红）。</summary>
+    private static IBrush AlertBrush(string? level)
+    {
+        var color = level switch
+        {
+            "蓝色" => "#55aaff",
+            "黄色" => "#ffdd44",
+            "橙色" => "#ff9933",
+            "红色" => "#ff5555",
+            _ => "#ffffff",
+        };
+        return new SolidColorBrush(Color.Parse(color));
+    }
+
+    /// <summary>触发所有提醒相关属性变更通知（数据或开关变化后调用）。</summary>
+    private void NotifyReminderChanged()
+    {
+        OnPropertyChanged(nameof(WeatherIcon));
+        OnPropertyChanged(nameof(WeatherText));
+        OnPropertyChanged(nameof(RainReminderTitle));
+        OnPropertyChanged(nameof(ShowRainReminder));
+        OnPropertyChanged(nameof(ReminderText));
+        OnPropertyChanged(nameof(CountdownText));
+        OnPropertyChanged(nameof(ShowWeatherRow));
+        OnPropertyChanged(nameof(ShowAlertsRow));
+        OnPropertyChanged(nameof(ShowCountdownRow));
+        OnPropertyChanged(nameof(ShowTextRow));
+        OnPropertyChanged(nameof(ShowReminderPanel));
+        OnPropertyChanged(nameof(RainSubtitle));
+        OnPropertyChanged(nameof(HasRainSubtitle));
+        UpdateWeatherSubtitle();   // 天气码/温度变化后重算气温副标题
+        UpdateCountdownSubtitle(); // 倒计时剩余天数变化后重算冲刺副标题
+        UpdateCountdownWrap();   // 天气/倒计时内容变化后重算换行
+        OnPropertyChanged(nameof(CountdownWrapped));
+    }
+
+    /// <summary>CI 数据目录（data\，位于插件配置目录的上一级）。</summary>
+    private string CiDataDir => Path.GetFullPath(Path.Combine(Plugin.ConfigFolder!, "..", "..", ".."));
+
     /// <summary>
     /// 记录规则（鼠标悬停计数区域时以提示显示）。
     /// </summary>
@@ -332,6 +790,7 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
             // 外观颜色属性是直接读 _settings 的 getter，窗口从 Hide 退出后复用不自动刷新，
             // 主动触发通知让绑定重新求值（修复：改完颜色后要重启 CI 才生效的问题）
             RefreshAppearanceBindings();
+            RefreshRemindersNow();
 
             if (_window == null)
             {
@@ -412,6 +871,7 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         var now = DateTime.Now;
         CurrentTime = now.ToString("HH:mm:ss");
         CurrentDate = now.ToString("yyyy年M月d日 dddd");
+        UpdateDateSubtitle();   // 日期下方副标题（深夜/周五/月初），每秒刷新
 
         try
         {
@@ -425,6 +885,15 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
 
         // 刷新计数区域（脏标记：内容未变不重建；保护倒计时需要每秒刷新）
         UpdateNoisyDisplay();
+
+        // 提醒面板：组件配置每 3 秒同步一次（用户改 CI 组件自动跟随），天气缓存每 60 秒读一次
+        _reminderTick++;
+        if (_reminderTick % 3 == 0) RefreshComponents();
+        if ((DateTime.Now - _lastWeatherRead).TotalSeconds >= 60)
+        {
+            _lastWeatherRead = DateTime.Now;
+            RefreshWeather();
+        }
     }
 
     private void LoadTodaySchedule()
@@ -794,4 +1263,14 @@ public class NoisyDisplaySegment
 {
     public string Text { get; set; } = "";
     public IBrush Foreground { get; set; } = new SolidColorBrush(Color.Parse("#ffff44"));
+}
+
+/// <summary>提醒面板中单条预警的显示项（等级着色 + 详情全文，鼠标悬停即在顶部弹幕带显示）。</summary>
+public class AlertDisplayItem
+{
+    public required string DisplayText { get; init; }
+    public required IBrush Foreground { get; init; }
+
+    /// <summary>预警详情全文（alerts[].detail），鼠标悬停该条时显示。</summary>
+    public string? Detail { get; init; }
 }
