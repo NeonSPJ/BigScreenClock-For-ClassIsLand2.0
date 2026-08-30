@@ -65,7 +65,7 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
     public double ClockFontSize
     {
         get => _settings.ClockFontSize;
-        set { _settings.ClockFontSize = (int)value; OnPropertyChanged(nameof(ClockFontSize)); OnPropertyChanged(nameof(PreviewFontSize)); }
+        set { _settings.ClockFontSize = (int)value; OnPropertyChanged(nameof(ClockFontSize)); OnPropertyChanged(nameof(PreviewFontSize)); OnPropertyChanged(nameof(ClockFontSizeText)); }
     }
 
     private void LoadAllCourseNames()
@@ -136,10 +136,18 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
 
     // 对数刻度：Slider 范围 -3~0 映射阈值 0.001~1.0（阈值 = 10^index）。
     // 低值区（0.04~0.14）在线性滑块上挤成一团，对数刻度才能精细拖动。
+    // 递增联动：安静 < 良好 < 一般 < 吵闹 必须依次递增——后一级滑块的最小值
+    // 就是前一级的当前值（对数刻度），保证永远有序。
     private const double ThresholdSliderMin = -3.0;
     private const double ThresholdSliderMax = 0.0;
     private const double ThresholdMin = 0.001;
     private const double ThresholdMax = 1.0;
+
+    // 动态滑块最小值（对数刻度），供 XAML 上 良好/一般/吵闹 Slider 的 Minimum 绑定。
+    // 例如安静设为 0.01，良好的可拖范围就变成 0.01~1.00。
+    public double GoodThresholdSliderMin => Math.Log10(_settings.DecibelQuietThreshold);
+    public double NormalThresholdSliderMin => Math.Log10(_settings.DecibelGoodThreshold);
+    public double NoisyThresholdSliderMin => Math.Log10(_settings.DecibelNormalThreshold);
 
     public double DecibelQuietThresholdIndex
     {
@@ -147,7 +155,8 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
         set
         {
             _settings.DecibelQuietThreshold = Math.Clamp(Math.Pow(10, value), ThresholdMin, ThresholdMax);
-            OnPropertyChanged(nameof(DecibelQuietThresholdText));
+            ClampThresholds();
+            NotifyThresholdsChanged();
         }
     }
     public double DecibelGoodThresholdIndex
@@ -156,7 +165,8 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
         set
         {
             _settings.DecibelGoodThreshold = Math.Clamp(Math.Pow(10, value), ThresholdMin, ThresholdMax);
-            OnPropertyChanged(nameof(DecibelGoodThresholdText));
+            ClampThresholds();
+            NotifyThresholdsChanged();
         }
     }
     public double DecibelNormalThresholdIndex
@@ -165,7 +175,8 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
         set
         {
             _settings.DecibelNormalThreshold = Math.Clamp(Math.Pow(10, value), ThresholdMin, ThresholdMax);
-            OnPropertyChanged(nameof(DecibelNormalThresholdText));
+            ClampThresholds();
+            NotifyThresholdsChanged();
         }
     }
     public double DecibelNoisyThresholdIndex
@@ -174,40 +185,69 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
         set
         {
             _settings.DecibelNoisyThreshold = Math.Clamp(Math.Pow(10, value), ThresholdMin, ThresholdMax);
-            OnPropertyChanged(nameof(DecibelNoisyThresholdText));
+            ClampThresholds();
+            NotifyThresholdsChanged();
         }
     }
 
     public string DecibelQuietThresholdText
     {
         get => _settings.DecibelQuietThreshold.ToString("F4");
-        set { SetThreshold(nameof(DecibelQuietThresholdText), nameof(DecibelQuietThresholdIndex), value, v => _settings.DecibelQuietThreshold = v); }
+        set { SetThreshold(nameof(DecibelQuietThresholdText), value, v => _settings.DecibelQuietThreshold = v); }
     }
     public string DecibelGoodThresholdText
     {
         get => _settings.DecibelGoodThreshold.ToString("F4");
-        set { SetThreshold(nameof(DecibelGoodThresholdText), nameof(DecibelGoodThresholdIndex), value, v => _settings.DecibelGoodThreshold = v); }
+        set { SetThreshold(nameof(DecibelGoodThresholdText), value, v => _settings.DecibelGoodThreshold = v); }
     }
     public string DecibelNormalThresholdText
     {
         get => _settings.DecibelNormalThreshold.ToString("F4");
-        set { SetThreshold(nameof(DecibelNormalThresholdText), nameof(DecibelNormalThresholdIndex), value, v => _settings.DecibelNormalThreshold = v); }
+        set { SetThreshold(nameof(DecibelNormalThresholdText), value, v => _settings.DecibelNormalThreshold = v); }
     }
     public string DecibelNoisyThresholdText
     {
         get => _settings.DecibelNoisyThreshold.ToString("F4");
-        set { SetThreshold(nameof(DecibelNoisyThresholdText), nameof(DecibelNoisyThresholdIndex), value, v => _settings.DecibelNoisyThreshold = v); }
+        set { SetThreshold(nameof(DecibelNoisyThresholdText), value, v => _settings.DecibelNoisyThreshold = v); }
     }
 
-    private void SetThreshold(string propName, string indexName, string value, Action<double> setter)
+    private void SetThreshold(string propName, string value, Action<double> setter)
     {
         if (double.TryParse(value, out var v))
         {
             setter(Math.Clamp(v, ThresholdMin, ThresholdMax));
-            // 回写标准化值，避免文本框残留非法输入；同时让滑块跟随
-            OnPropertyChanged(propName);
-            OnPropertyChanged(indexName);
+            ClampThresholds();
+            NotifyThresholdsChanged();
         }
+    }
+
+    /// <summary>
+    /// 链式约束：强制 安静 ≤ 良好 ≤ 一般 ≤ 吵闹。后一级若低于前一级则被钳回前一级的值，
+    /// 保证拖动/填数后阈值永远递增有序。
+    /// </summary>
+    private void ClampThresholds()
+    {
+        _settings.DecibelGoodThreshold = Math.Max(_settings.DecibelGoodThreshold, _settings.DecibelQuietThreshold);
+        _settings.DecibelNormalThreshold = Math.Max(_settings.DecibelNormalThreshold, _settings.DecibelGoodThreshold);
+        _settings.DecibelNoisyThreshold = Math.Max(_settings.DecibelNoisyThreshold, _settings.DecibelNormalThreshold);
+    }
+
+    /// <summary>
+    /// 阈值相关属性统一通知：四个文本框、四个滑块位置、以及后一级滑块的 Minimum。
+    /// </summary>
+    private void NotifyThresholdsChanged()
+    {
+        OnPropertyChanged(nameof(DecibelQuietThresholdText));
+        OnPropertyChanged(nameof(DecibelGoodThresholdText));
+        OnPropertyChanged(nameof(DecibelNormalThresholdText));
+        OnPropertyChanged(nameof(DecibelNoisyThresholdText));
+        OnPropertyChanged(nameof(DecibelQuietThresholdIndex));
+        OnPropertyChanged(nameof(DecibelGoodThresholdIndex));
+        OnPropertyChanged(nameof(DecibelNormalThresholdIndex));
+        OnPropertyChanged(nameof(DecibelNoisyThresholdIndex));
+        OnPropertyChanged(nameof(GoodThresholdSliderMin));
+        OnPropertyChanged(nameof(NormalThresholdSliderMin));
+        OnPropertyChanged(nameof(NoisyThresholdSliderMin));
     }
 
     // ===== 记录参数 =====
@@ -267,6 +307,30 @@ public partial class SettingsPage : SettingsPageBase, INotifyPropertyChanged
             OnPropertyChanged(nameof(EnableNoiseDebugLog));
         }
     }
+
+    public int LogRetentionDays
+    {
+        get => _settings.LogRetentionDays;
+        set
+        {
+            _settings.LogRetentionDays = value;
+            OnPropertyChanged(nameof(LogRetentionDays));
+            OnPropertyChanged(nameof(LogRetentionDaysText));
+        }
+    }
+    public string LogRetentionDaysText => $"{_settings.LogRetentionDays} 天";
+
+    public int LogSizeLimitKb
+    {
+        get => _settings.LogSizeLimitKb;
+        set
+        {
+            _settings.LogSizeLimitKb = value;
+            OnPropertyChanged(nameof(LogSizeLimitKb));
+            OnPropertyChanged(nameof(LogSizeLimitKbText));
+        }
+    }
+    public string LogSizeLimitKbText => $"{_settings.LogSizeLimitKb} KB";
 
     public bool ShowDecibelMeter
     {

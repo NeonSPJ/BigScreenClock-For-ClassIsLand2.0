@@ -26,6 +26,8 @@ public class PluginSettings : INotifyPropertyChanged
     private double _noisySustainSeconds = 1.0;
     private double _fallWindowSeconds = 5.0;
     private bool _enableNoiseDebugLog;
+    private int _logRetentionDays = 3;
+    private int _logSizeLimitKb = 500;
     private int _clockFontSize = 180;
     private string _windowTitle = "大屏时钟";
     private bool _showReminderPanel = true;
@@ -212,6 +214,24 @@ public class PluginSettings : INotifyPropertyChanged
     {
         get => _enableNoiseDebugLog;
         set { _enableNoiseDebugLog = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 调试日志保留天数：超过该天数的旧日志自动清理。默认 3 天，范围 1~5。
+    /// </summary>
+    public int LogRetentionDays
+    {
+        get => _logRetentionDays;
+        set { _logRetentionDays = Math.Clamp(value, 1, 5); OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// 单个调试日志文件大小上限（KB）：超限后滚动新文件。默认 500KB，范围 500~3072。
+    /// </summary>
+    public int LogSizeLimitKb
+    {
+        get => _logSizeLimitKb;
+        set { _logSizeLimitKb = Math.Clamp(value, 500, 3072); OnPropertyChanged(); }
     }
 
     /// <summary>

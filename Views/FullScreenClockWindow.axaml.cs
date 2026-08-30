@@ -27,12 +27,12 @@ public partial class FullScreenClockWindow : Window
         DataContextChanged += (_, _) => UpdateReminderPanelWidth();
     }
 
-    /// <summary>提醒面板最大宽 = 屏幕宽 × 2/3；倒计时换行阈值 = 屏幕宽 × 1/3。</summary>
+    /// <summary>提醒面板最大宽 = 屏幕宽 × 2/3；第一行提醒合并阈值 = 屏幕宽 × 1/3。</summary>
     private void UpdateReminderPanelWidth()
     {
         if (DataContext is not FullScreenClockViewModel vm) return;
         vm.ReminderPanelMaxWidth = Bounds.Width * 2.0 / 3.0;
-        vm.CountdownWrapThreshold = Bounds.Width / 3.0;
+        vm.MergeThreshold = Bounds.Width / 3.0;
     }
 
     /// <summary>鼠标悬停某条预警：在顶部弹幕带显示其详情（自动切换，不需要先收起旧条）。</summary>
@@ -42,13 +42,10 @@ public partial class FullScreenClockWindow : Window
         if (DataContext is not FullScreenClockViewModel vm) return;
 
         vm.ExpandedAlertDetail = item.Detail;
-        // 单行/双行布局各有一个弹幕 ScrollViewer，只对实际可见的那个启动（隐藏版 IsEffectivelyVisible=false 直接跳过）。
-        // 先停旧弹幕再重新启动：悬停另一条时 Text 已变，不能靠 SizeChanged 触发，显式重启。
-        foreach (var sv in new[] { AlertDetailScrollInline, AlertDetailScrollWrapped })
-        {
-            StopMarquee(sv);
-            StartMarquee(sv);
-        }
+        // 顶部只有一个弹幕 ScrollViewer。先停旧弹幕再重新启动：悬停另一条时 Text 已变，
+        // 不能靠 SizeChanged 触发，显式重启。
+        StopMarquee(AlertDetailScroll);
+        StartMarquee(AlertDetailScroll);
     }
 
     /// <summary>鼠标移出该条预警：收起顶部弹幕。</summary>
@@ -56,8 +53,7 @@ public partial class FullScreenClockWindow : Window
     {
         if (DataContext is not FullScreenClockViewModel vm) return;
         vm.ExpandedAlertDetail = null;
-        StopMarquee(AlertDetailScrollInline);
-        StopMarquee(AlertDetailScrollWrapped);
+        StopMarquee(AlertDetailScroll);
     }
 
     /// <summary>停止弹幕：停定时器、清平移、清启动标记（下次 StartMarquee 才能重新启动）。</summary>

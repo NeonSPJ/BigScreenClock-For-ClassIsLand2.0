@@ -44,6 +44,7 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
 
     // 调试日志
     private StreamWriter? _logWriter;
+    private string? _logPath;
     private int _logLines;
 
     public DecibelMeterService(PluginSettings settings)
@@ -339,6 +340,17 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
             if (string.IsNullOrEmpty(dir)) return;
             Directory.CreateDirectory(dir);
 
+            // 清理过期日志：删除超过保留天数（默认 3 天）的旧 NoiseDebugLog-*.csv，防止开了忘关堆积
+            try
+            {
+                var cutoff = DateTime.Now.AddDays(-_settings.LogRetentionDays);
+                foreach (var old in Directory.EnumerateFiles(dir, "NoiseDebugLog-*.csv"))
+                {
+                    try { if (File.GetLastWriteTime(old) < cutoff) File.Delete(old); } catch { }
+                }
+            }
+            catch { }
+
             // 每次开始监测 = 一个新文件，命名规则与 ClassIsland 自身日志一致：
             // 开始记录的 年-月-日-时-分-秒（同秒冲突时追加 -1/-2…）。
             var timestamp = DateTime.Now.ToString("y-M-d-HH-mm-ss");
@@ -346,6 +358,7 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
             for (int i = 1; File.Exists(path); i++)
                 path = Path.Combine(dir, $"NoiseDebugLog-{timestamp}-{i}.csv");
 
+            _logPath = path;
             _logWriter = new StreamWriter(path, append: false, System.Text.Encoding.UTF8);
             _logWriter.WriteLine("Time,RawRMS,Peak,SmoothRMS,Level,EpisodeLevel,EventState,Fired");
             _logLines = 0;
@@ -357,6 +370,7 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
     {
         try { _logWriter?.Flush(); _logWriter?.Dispose(); } catch { }
         _logWriter = null;
+        _logPath = null;
     }
 
     private void WriteDebugLog(double rawRms, double peak, SampleResult result)
@@ -371,7 +385,24 @@ public class DecibelMeterService : INotifyPropertyChanged, IDisposable
         _logWriter.WriteLine(
             $"{DateTime.Now:HH:mm:ss.fff},{rawRms:F4},{peak:F4},{result.SmoothedRms:F4}," +
             $"{result.Level},{episodeLevel},{eventState},{result.EventFired}");
-        if (++_logLines >= 20) { _logWriter.Flush(); _logLines = 0; }
+        if (++_logLines >= 20)
+        {
+            _logWriter.Flush();
+            _logLines = 0;
+            // 单文件达到大小上限（默认 500KB）后滚动新文件，防止无限增长
+            if (_logPath != null)
+            {
+                try
+                {
+                    if (new FileInfo(_logPath).Length > _settings.LogSizeLimitKb * 1024L)
+                    {
+                        CloseLogWriter();
+                        EnsureLogWriter();
+                    }
+                }
+                catch { }
+            }
+        }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

@@ -426,31 +426,149 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
     }
     public bool HasExpandedAlert => !string.IsNullOrEmpty(_expandedAlertDetail);
 
-    // 组合可见性：子开关 && 有数据；面板总开关 && 至少一个子项显示
-    // （天气/倒计时已在顶部行独立显示，不参与提醒面板）
+    // 组合可见性：子开关 && 有数据
     public bool ShowWeatherRow => _settings.ShowWeatherReminder && _reminderData.HasWeather;
     public bool ShowAlertsRow => _settings.ShowAlertsReminder && _reminderData.HasAlerts;
     public bool ShowCountdownRow => _settings.ShowCountdownReminder && _reminderData.HasCountdown;
     public bool ShowTextRow => _settings.ShowTextReminder && _reminderData.HasText;
-    public bool ShowReminderPanel => _settings.ShowReminderPanel
-        && (ShowAlertsRow || ShowTextRow || ShowRainReminder);
 
-    /// <summary>
-    /// 倒计时是否换行到天气下方：按实际渲染宽度判断。
-    /// 顶部第一行 = 天气 + 倒计时 + 预警详情弹幕，三者总宽超过屏幕 2/3（ReminderPanelMaxWidth）时，
-    /// 倒计时换行到天气下方、弹幕拉长到整行。
-    /// </summary>
-    public bool CountdownWrapped
+    // 提醒面板项：未并入第一行的 降雨/倒计时/文本 才在面板显示（天气永不在面板，预警始终在面板）
+    public bool ShowRainReminderPanel => ShowRainReminder && !ShowRainMergedInFirstRow;
+    public bool ShowCountdownPanel => ShowCountdownRow && !ShowCountdownMergedInFirstRow;
+    public bool ShowTextPanel => ShowTextRow && !ShowTextMergedInFirstRow;
+    public bool ShowReminderPanel => _settings.ShowReminderPanel
+        && (ShowAlertsRow || ShowRainReminderPanel || ShowCountdownPanel || ShowTextPanel);
+
+    // ===== 提醒自动合并为同行（顶部第一行 = 主位块 + 预警详情弹幕 + 日期） =====
+    // 用户定稿规则：
+    // - 天气固定第一行，与弹幕同行；
+    // - 与天气合并的优先级：降雨提醒 > 倒计时 > 文本，能放进屏幕 1/3 宽才合并，放不下该项留在提醒面板；
+    // - 无天气时，第一行主位由倒计时顶替，再无就文本框；
+    // - 天气预警始终单开一行/多行（面板）；
+    // - 颜文字（副标题）显示在主提醒的正下方。
+
+    private bool _showWeatherInFirstRow;
+    private bool _showRainMergedInFirstRow;
+    private bool _showCountdownMergedInFirstRow;
+    private bool _showTextMergedInFirstRow;
+
+    /// <summary>天气是否显示在第一行（有天气数据时恒为第一行主位）。</summary>
+    public bool ShowWeatherInFirstRow
     {
-        get => _countdownWrapped;
+        get => _showWeatherInFirstRow;
         private set
         {
-            if (_countdownWrapped == value) return;
-            _countdownWrapped = value;
+            if (_showWeatherInFirstRow == value) return;
+            _showWeatherInFirstRow = value;
             OnPropertyChanged();
         }
     }
-    private bool _countdownWrapped;
+
+    /// <summary>降雨提醒是否并入第一行。</summary>
+    public bool ShowRainMergedInFirstRow
+    {
+        get => _showRainMergedInFirstRow;
+        private set
+        {
+            if (_showRainMergedInFirstRow == value) return;
+            _showRainMergedInFirstRow = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>倒计时是否并入第一行（无天气时作为第一行主位）。</summary>
+    public bool ShowCountdownMergedInFirstRow
+    {
+        get => _showCountdownMergedInFirstRow;
+        private set
+        {
+            if (_showCountdownMergedInFirstRow == value) return;
+            _showCountdownMergedInFirstRow = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>文本是否并入第一行（无天气且无倒计时时作为第一行主位）。</summary>
+    public bool ShowTextMergedInFirstRow
+    {
+        get => _showTextMergedInFirstRow;
+        private set
+        {
+            if (_showTextMergedInFirstRow == value) return;
+            _showTextMergedInFirstRow = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>合并判定阈值：主位块 + 并入项总宽不超过「屏幕宽 × 1/3」才并入（窗口 SizeChanged 设置）。</summary>
+    public double MergeThreshold
+    {
+        get => _mergeThreshold;
+        set
+        {
+            if (Math.Abs(_mergeThreshold - value) < 0.5) return;
+            _mergeThreshold = value;
+            OnPropertyChanged();
+            UpdateReminderMerge();   // 阈值变化会改变是否并入
+        }
+    }
+    private double _mergeThreshold = 640;
+
+    /// <summary>按实际渲染宽度重算第一行合并：天气固定，降雨>倒计时>文本 逐项尝试并入（≤1/3 屏）。</summary>
+    private void UpdateReminderMerge()
+    {
+        bool weather = ShowWeatherRow;
+        bool rain = ShowRainReminder;
+        bool countdown = ShowCountdownRow;
+        bool text = ShowTextRow;
+
+        bool rainMerged = false, countdownMerged = false, textMerged = false;
+        const double spacing = 24;
+        var threshold = MergeThreshold;
+
+        if (weather)
+        {
+            var used = TextWidth(WeatherIcon, 20) + 6 + TextWidth(WeatherText, 19);
+            // 合并优先级：降雨提醒 > 倒计时 > 文本
+            TryMerge(used, rain, rain ? TextWidth("☔", 20) + 6 + TextWidth(RainReminderTitle, 19) : 0,
+                spacing, threshold, ref used, ref rainMerged);
+            TryMerge(used, countdown, countdown ? TextWidth("⏳", 20) + 6 + TextWidth(CountdownText, 19) : 0,
+                spacing, threshold, ref used, ref countdownMerged);
+            TryMerge(used, text, text ? TextWidth(ReminderText, 16) : 0,
+                spacing, threshold, ref used, ref textMerged);
+        }
+        else if (countdown)
+        {
+            countdownMerged = true;   // 无天气：第一行主位由倒计时顶替
+        }
+        else if (text)
+        {
+            textMerged = true;        // 再无就文本框
+        }
+
+        ShowWeatherInFirstRow = weather;
+        ShowRainMergedInFirstRow = rainMerged;
+        ShowCountdownMergedInFirstRow = countdownMerged;
+        ShowTextMergedInFirstRow = textMerged;
+
+        // 面板项（未并入的）与总开关重新求值
+        OnPropertyChanged(nameof(ShowRainReminderPanel));
+        OnPropertyChanged(nameof(ShowCountdownPanel));
+        OnPropertyChanged(nameof(ShowTextPanel));
+        OnPropertyChanged(nameof(ShowReminderPanel));
+    }
+
+    /// <summary>尝试把某项并入主位块：当前已用宽度 + 间距 + 该项宽 ≤ 阈值 才并入。</summary>
+    private static void TryMerge(double used, bool candidate, double candidateWidth,
+        double spacing, double threshold, ref double usedOut, ref bool merged)
+    {
+        if (!candidate || candidateWidth <= 0) return;
+        if (used + spacing + candidateWidth <= threshold)
+        {
+            usedOut = used + spacing + candidateWidth;
+            merged = true;
+        }
+    }
 
     /// <summary>提醒面板最大宽度：由窗口按「屏幕宽 × 2/3」设置，只约束提醒面板（降雨/文本/预警）。</summary>
     public double ReminderPanelMaxWidth
@@ -465,27 +583,6 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
     }
     private double _reminderPanelMaxWidth = 520;
 
-    /// <summary>倒计时换行阈值：天气+倒计时实际宽度超过「屏幕宽 × 1/3」时，倒计时换行到天气下方。</summary>
-    public double CountdownWrapThreshold
-    {
-        get => _countdownWrapThreshold;
-        set
-        {
-            if (Math.Abs(_countdownWrapThreshold - value) < 0.5) return;
-            _countdownWrapThreshold = value;
-            OnPropertyChanged();
-            UpdateCountdownWrap();   // 阈值变化会改变是否换行
-        }
-    }
-    private double _countdownWrapThreshold = 640;
-
-    /// <summary>按实际渲染宽度重算倒计时是否换行（天气+倒计时宽度是否超过屏幕 1/3）。</summary>
-    private void UpdateCountdownWrap()
-    {
-        var weatherRow = TextWidth(WeatherIcon, 20) + 6 + TextWidth(WeatherText, 19);
-        var countdownRow = TextWidth("⏳", 20) + 6 + TextWidth(CountdownText, 19);
-        CountdownWrapped = weatherRow + 28 + countdownRow > CountdownWrapThreshold;
-    }
 
     // ===== 颜文字副标题（趣味提醒）：气温/天气旁、日期旁、倒计时旁、降雨旁的小字号副标题 =====
     // 由「颜文字提醒」开关统一控制；关闭时全部清空、保留正文字幕。固定文本不轮换。
@@ -748,8 +845,8 @@ public class FullScreenClockViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(HasRainSubtitle));
         UpdateWeatherSubtitle();   // 天气码/温度变化后重算气温副标题
         UpdateCountdownSubtitle(); // 倒计时剩余天数变化后重算冲刺副标题
-        UpdateCountdownWrap();   // 天气/倒计时内容变化后重算换行
-        OnPropertyChanged(nameof(CountdownWrapped));
+        UpdateReminderMerge();   // 内容/开关变化后重算第一行合并
+        OnPropertyChanged(nameof(ShowReminderPanel));
     }
 
     /// <summary>CI 数据目录（data\，位于插件配置目录的上一级）。</summary>

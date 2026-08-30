@@ -20,31 +20,51 @@
         <Grid Grid.Row="0" RowDefinitions="Auto,*,Auto,Auto"
               Margin="40,30,40,18">
 
-            <!-- 顶部行：天气 + 倒计时 + 预警详情弹幕 + 日期。
-                 按「天气+倒计时+弹幕实际宽度是否超过屏幕 2/3」在 单行/双行 间切换（VM 的 CountdownWrapped）：
-                 - 单行：天气、倒计时、弹幕同排，弹幕占「倒计时末尾 → 日期前」的剩余宽度，随倒计时长度自适应；
-                 - 双行：倒计时换行到天气下方，弹幕拉长到整行。 -->
-            <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto"
-                  IsVisible="{Binding !CountdownWrapped}">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6"
-                            VerticalAlignment="Center" IsVisible="{Binding ShowWeatherRow}">
-                    <TextBlock Text="{Binding WeatherIcon}" FontSize="20" VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding WeatherText}" FontSize="19" FontWeight="Bold"
-                               Foreground="#FFFFFF" VerticalAlignment="Center" TextWrapping="NoWrap"/>
-                    <TextBlock Text="{Binding WeatherSubtitle}" FontSize="11" Foreground="#AAFFFFFF"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               IsVisible="{Binding HasWeatherSubtitle}"/>
+            <!-- 顶部第一行：主位提醒块（天气 + 可并入的降雨/倒计时/文本，颜文字在各块正下方）+ 预警详情弹幕（自适应）+ 日期。
+                 合并规则（VM 的 UpdateReminderMerge）：
+                 - 天气固定第一行主位，与弹幕同行；
+                 - 与天气合并优先级 降雨提醒 > 倒计时 > 文本，总宽 ≤ 屏幕 1/3 才并入，放不下该项留提醒面板；
+                 - 无天气时主位由倒计时顶替，再无就文本框；
+                 - 天气预警始终单开一行/多行（面板），不在顶部行。 -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="24" VerticalAlignment="Center">
+                    <!-- 天气块（含正下方颜文字） -->
+                    <StackPanel Spacing="2" IsVisible="{Binding ShowWeatherInFirstRow}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding WeatherIcon}" FontSize="20" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding WeatherText}" FontSize="19" FontWeight="Bold"
+                                       Foreground="#FFFFFF" VerticalAlignment="Center" TextWrapping="NoWrap"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding WeatherSubtitle}" FontSize="11" Foreground="#AAFFFFFF"
+                                   IsVisible="{Binding HasWeatherSubtitle}" Margin="2,0,0,0"/>
+                    </StackPanel>
+                    <!-- 降雨块（并入第一行时；含正下方颜文字） -->
+                    <StackPanel Spacing="2" IsVisible="{Binding ShowRainMergedInFirstRow}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="☔" FontSize="20" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding RainReminderTitle}" FontSize="19" FontWeight="Bold"
+                                       Foreground="#FFFFFF" VerticalAlignment="Center" TextWrapping="NoWrap"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding RainSubtitle}" FontSize="11" Foreground="#AAFFFFFF"
+                                   IsVisible="{Binding HasRainSubtitle}" Margin="2,0,0,0"/>
+                    </StackPanel>
+                    <!-- 倒计时块（并入第一行时；无天气时作主位；含正下方颜文字） -->
+                    <StackPanel Spacing="2" IsVisible="{Binding ShowCountdownMergedInFirstRow}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="⏳" FontSize="20" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding CountdownText}" FontSize="19" FontWeight="Bold"
+                                       Foreground="#FFFFDD" VerticalAlignment="Center" TextWrapping="NoWrap"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding CountdownSubtitle}" FontSize="11" Foreground="#AAFFFFFF"
+                                   IsVisible="{Binding HasCountdownSubtitle}" Margin="2,0,0,0"/>
+                    </StackPanel>
+                    <!-- 文本块（并入第一行时；无天气且无倒计时时作主位） -->
+                    <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding ShowTextMergedInFirstRow}">
+                        <TextBlock Text="{Binding ReminderText}" FontSize="16" FontWeight="Bold"
+                                   Foreground="#DDFFFFFF" VerticalAlignment="Center" TextWrapping="NoWrap"/>
+                    </StackPanel>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="28,0,0,0"
-                            VerticalAlignment="Center" IsVisible="{Binding ShowCountdownRow}">
-                    <TextBlock Text="⏳" FontSize="20" VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding CountdownText}" FontSize="19" FontWeight="Bold"
-                               Foreground="#FFFFDD" VerticalAlignment="Center" TextWrapping="NoWrap"/>
-                    <TextBlock Text="{Binding CountdownSubtitle}" FontSize="11" Foreground="#AAFFFFFF"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               IsVisible="{Binding HasCountdownSubtitle}"/>
-                </StackPanel>
-                <ScrollViewer x:Name="AlertDetailScrollInline" Grid.Column="2"
+                <ScrollViewer x:Name="AlertDetailScroll" Grid.Column="1"
                               HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
                               Margin="28,0,0,0" VerticalAlignment="Center"
                               IsVisible="{Binding HasExpandedAlert}"
@@ -52,49 +72,13 @@
                     <TextBlock Text="{Binding ExpandedAlertDetail}" FontSize="16" Foreground="#BBFFFFFF"
                                TextWrapping="NoWrap" VerticalAlignment="Center"/>
                 </ScrollViewer>
-                <StackPanel Grid.Column="3" Margin="28,0,0,0" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <StackPanel Grid.Column="2" Margin="28,0,0,0" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <TextBlock Text="{Binding CurrentDate}" FontSize="22" Foreground="#66ffffff"
                                HorizontalAlignment="Right" PointerPressed="DateText_PointerPressed"/>
                     <TextBlock Text="{Binding DateSubtitle}" FontSize="11" Foreground="#AAFFFFFF"
                                HorizontalAlignment="Right" IsVisible="{Binding HasDateSubtitle}"/>
                 </StackPanel>
             </Grid>
-            <StackPanel Grid.Row="0" Spacing="4" IsVisible="{Binding CountdownWrapped}">
-                <!-- 第一行：天气 + 弹幕 + 日期（倒计时换行腾出的位置给弹幕） -->
-                <Grid ColumnDefinitions="Auto,*,Auto">
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6"
-                                VerticalAlignment="Center" IsVisible="{Binding ShowWeatherRow}">
-                        <TextBlock Text="{Binding WeatherIcon}" FontSize="20" VerticalAlignment="Center"/>
-                        <TextBlock Text="{Binding WeatherText}" FontSize="19" FontWeight="Bold"
-                                   Foreground="#FFFFFF" VerticalAlignment="Center" TextWrapping="NoWrap"/>
-                        <TextBlock Text="{Binding WeatherSubtitle}" FontSize="11" Foreground="#AAFFFFFF"
-                                   VerticalAlignment="Center" Margin="8,0,0,0"
-                                   IsVisible="{Binding HasWeatherSubtitle}"/>
-                    </StackPanel>
-                    <ScrollViewer x:Name="AlertDetailScrollWrapped" Grid.Column="1"
-                                  HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
-                                  Margin="28,0,0,0" VerticalAlignment="Center"
-                                  IsVisible="{Binding HasExpandedAlert}" SizeChanged="DetailScroll_SizeChanged">
-                        <TextBlock Text="{Binding ExpandedAlertDetail}" FontSize="16" Foreground="#BBFFFFFF"
-                                   TextWrapping="NoWrap" VerticalAlignment="Center"/>
-                    </ScrollViewer>
-                    <StackPanel Grid.Column="2" Margin="28,0,0,0" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding CurrentDate}" FontSize="22" Foreground="#66ffffff"
-                                   HorizontalAlignment="Right" PointerPressed="DateText_PointerPressed"/>
-                        <TextBlock Text="{Binding DateSubtitle}" FontSize="11" Foreground="#AAFFFFFF"
-                                   HorizontalAlignment="Right" IsVisible="{Binding HasDateSubtitle}"/>
-                    </StackPanel>
-                </Grid>
-                <!-- 第二行：倒计时 -->
-                <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding ShowCountdownRow}">
-                    <TextBlock Text="⏳" FontSize="20" VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding CountdownText}" FontSize="19" FontWeight="Bold"
-                               Foreground="#FFFFDD" VerticalAlignment="Center" TextWrapping="NoWrap"/>
-                    <TextBlock Text="{Binding CountdownSubtitle}" FontSize="11" Foreground="#AAFFFFFF"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               IsVisible="{Binding HasCountdownSubtitle}"/>
-                </StackPanel>
-            </StackPanel>
 
             <!-- 主体 -->
             <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="20">
@@ -216,24 +200,32 @@
                            TextWrapping="Wrap"/>
             </StackPanel>
 
-            <!-- 左上角提醒面板（无边框无背景纯文字：降雨提醒、文本、预警。天气/倒计时/预警详情弹幕在顶部行显示） -->
+            <!-- 左上角提醒面板（无边框无背景纯文字：未并入第一行的 降雨/倒计时/文本 + 预警。天气在顶部行主位，预警始终单开） -->
             <Border Grid.Row="1" Grid.RowSpan="3" HorizontalAlignment="Left" VerticalAlignment="Top"
                     MaxWidth="{Binding ReminderPanelMaxWidth}" MaxHeight="400"
                     IsHitTestVisible="True"
                     IsVisible="{Binding ShowReminderPanel}">
                 <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Spacing="8">
-                        <!-- 降雨提醒：☔ + 主标题 + 小字号副标题（跟随天气开关） -->
-                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding ShowRainReminder}">
+                        <!-- 降雨提醒（未并入第一行才在面板显示）：☔ + 主标题 + 小字号副标题 -->
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding ShowRainReminderPanel}">
                             <TextBlock Text="☔" FontSize="20" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding RainReminderTitle}" FontSize="19" FontWeight="Bold"
                                        Foreground="#FFFFFF" VerticalAlignment="Center" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding RainSubtitle}" FontSize="12" Foreground="#AAFFFFFF" VerticalAlignment="Center"
                                        IsVisible="{Binding HasRainSubtitle}"/>
                         </StackPanel>
-                        <!-- 文本（跟随 CI 主界面文本组件） -->
+                        <!-- 倒计时（未并入第一行才在面板显示） -->
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding ShowCountdownPanel}">
+                            <TextBlock Text="⏳" FontSize="20" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding CountdownText}" FontSize="19" FontWeight="Bold"
+                                       Foreground="#FFFFDD" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding CountdownSubtitle}" FontSize="12" Foreground="#AAFFFFFF" VerticalAlignment="Center"
+                                       IsVisible="{Binding HasCountdownSubtitle}"/>
+                        </StackPanel>
+                        <!-- 文本（未并入第一行才在面板显示；跟随 CI 主界面文本组件） -->
                         <TextBlock Text="{Binding ReminderText}" FontSize="16" Foreground="#DDFFFFFF"
-                                   TextWrapping="Wrap" IsVisible="{Binding ShowTextRow}"/>
+                                   TextWrapping="Wrap" IsVisible="{Binding ShowTextPanel}"/>
                         <!-- 预警（排最下，区级统一发布按等级着色；点击标题右侧「>」在标题同一行右侧横向展开详情全文） -->
                         <StackPanel Spacing="3" IsVisible="{Binding ShowAlertsRow}">
                             <ItemsControl ItemsSource="{Binding AlertItems}">
