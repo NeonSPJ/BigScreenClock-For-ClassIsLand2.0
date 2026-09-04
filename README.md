@@ -2,7 +2,7 @@
 
 ClassIsland 插件 —— 自动全屏显示当前时间、教室分贝值和课程信息
 
-本插件的功能演示视频现已上线哔哩哔哩（B 站）。在 B 站搜索：ClassIsland2.0 插件「大屏时钟」演示视频，或直接搜索BV号 BV1b7tH6EEmj，即可观看。视频详细介绍了插件的各项功能，建议使用前先观看。
+本插件的功能演示视频现已上线哔哩哔哩（B 站）。在 B 站搜索：ClassIsland2.0 插件「大屏时钟」演示视频，或直接搜索BV号 BV1b7tH6EEmj，即可观看。视频详细介绍了插件的各项功能，建议使用前先观看。（【ClassIsland2.0插件 「大屏时钟」演示视频】 https://www.bilibili.com/video/BV1b7tH6EEmj/?share_source=copy_web&vd_source=e9de780e01ae17b0d85effcd4190dc98）
 
 ## 功能
 
