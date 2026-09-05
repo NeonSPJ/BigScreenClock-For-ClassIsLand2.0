@@ -82,13 +82,20 @@
 
             <!-- 主体 -->
             <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="20">
-                <!-- 时间 -->
-                <TextBlock x:Name="ClockText" Text="{Binding CurrentTime}"
-                           FontSize="{Binding ClockFontSize}"
-                           FontWeight="Bold"
-                           Foreground="{Binding FontColor}"
-                           FontFamily="Consolas,monospace"
-                           HorizontalAlignment="Center"/>
+                <!-- 时间。ClockHost 内衬一个隐形「88:88:88」占位撑宽:比例字体(如 SF Pro Text)各数字宽窄不一,
+                     直接按实际文本算宽会每秒随数字变化,连累下方噪声条宽度抖动。占位格保证文字区宽度恒定。 -->
+                <Grid x:Name="ClockHost" HorizontalAlignment="Center">
+                    <TextBlock x:Name="ClockText" Text="{Binding CurrentTime}"
+                               FontSize="{Binding ClockFontSize}"
+                               FontWeight="Bold"
+                               Foreground="{Binding FontColor}"
+                               FontFamily="SF Pro Text,Consolas,monospace"
+                               TextAlignment="Center"/>
+                    <TextBlock Text="88:88:88" Opacity="0"
+                               FontSize="{Binding ClockFontSize}"
+                               FontWeight="Bold"
+                               FontFamily="SF Pro Text,Consolas,monospace"/>
+                </Grid>
 
                 <!-- 课程时间信息 -->
                 <TextBlock Text="{Binding CourseInfoText}"
@@ -97,8 +104,8 @@
                            HorizontalAlignment="Center"
                            IsVisible="{Binding ShowCourseInfo}"/>
 
-                <!-- 教室音量：无背景「横向轨道 + 分段刻度」仪表盘式条（宽度跟随时间字体） -->
-                <StackPanel Spacing="8" Width="{Binding #ClockText.Bounds.Width, FallbackValue=640}"
+                <!-- 教室音量：无背景「横向轨道 + 分段刻度」仪表盘式条（宽度跟随时间字体恒定占位宽，不受每秒数字宽窄影响） -->
+                <StackPanel Spacing="8" Width="{Binding #ClockHost.Bounds.Width, FallbackValue=640}"
                             HorizontalAlignment="Center"
                             IsVisible="{Binding ShowDecibelMeter}">
                     <!-- 标题行：左「📢 教室音量」，右当前档位 emoji + 文字（档位色） -->
